@@ -10,8 +10,9 @@ use atrium_api::types::string::{AtIdentifier, Datetime, Did, RecordKey, Tid};
 use atrium_identity::did::CommonDidResolver;
 use atrium_identity::handle::AtprotoHandleResolver;
 use atrium_oauth::{DefaultHttpClient, OAuthSession};
+use atrium_xrpc::Error::Authentication;
 use indexed_db_futures::database::Database;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use types_2048::blue;
 use types_2048::blue::_2048;
 use types_2048::blue::_2048::player;
@@ -28,12 +29,14 @@ type AgentType = Agent<
     >,
 >;
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum AtRepoSyncError {
     LocalIsNewer,
     RemoteIsNewer,
     AtRepoCallError(String),
     LocalRepoError(String),
-    ThereWasAnError(String),
+    Error(String),
+    AuthErrorNeedToReLogin,
 }
 
 pub trait AtRepoSyncTrait {
@@ -53,9 +56,12 @@ impl std::fmt::Display for AtRepoSyncError {
             AtRepoSyncError::LocalIsNewer => write!(f, "Local is newer"),
             AtRepoSyncError::RemoteIsNewer => write!(f, "Remote is newer"),
             AtRepoSyncError::AtRepoCallError(err) => write!(f, "AtRepoCallError: {}", err),
-            AtRepoSyncError::ThereWasAnError(err) => write!(f, "ThereWasAnError: {}", err),
+            AtRepoSyncError::Error(err) => write!(f, "ThereWasAnError: {}", err),
             AtRepoSyncError::LocalRepoError(err) => {
                 write!(f, "LocalRepoError: {}", err)
+            }
+            AtRepoSyncError::AuthErrorNeedToReLogin => {
+                write!(f, "There was an error with the auth, need to relogin")
             }
         }
     }
@@ -137,7 +143,7 @@ impl AtRepoSync
         key: RecordKey,
     ) -> Result<Record, AtRepoSyncError> {
         match &self.client {
-            None => Err(AtRepoSyncError::ThereWasAnError("No client".to_string())),
+            None => Err(AtRepoSyncError::Error("No client".to_string())),
             Some(client) => {
                 match client
                     .api
@@ -218,7 +224,7 @@ impl AtRepoSync
         let db = match Database::open(DB_NAME).await {
             Ok(db) => db,
             Err(err) => {
-                return Err(AtRepoSyncError::ThereWasAnError(err.to_string()));
+                return Err(AtRepoSyncError::Error(err.to_string()));
             }
         };
 
@@ -238,7 +244,7 @@ impl AtRepoSync
         .await
         {
             Ok(_) => Ok(new_user_profile),
-            Err(err) => Err(AtRepoSyncError::ThereWasAnError(err.to_string())),
+            Err(err) => Err(AtRepoSyncError::Error(err.to_string())),
         }
     }
 
@@ -248,14 +254,14 @@ impl AtRepoSync
         let db = match Database::open(DB_NAME).await {
             Ok(db) => db,
             Err(err) => {
-                return Err(AtRepoSyncError::ThereWasAnError(err.to_string()));
+                return Err(AtRepoSyncError::Error(err.to_string()));
             }
         };
 
         match object_get::<player::profile::RecordData>(db, PROFILE_STORE, SELF_KEY).await {
             Ok(profile) => Ok(profile),
             Err(err) => {
-                return Err(AtRepoSyncError::ThereWasAnError(err.to_string()));
+                return Err(AtRepoSyncError::Error(err.to_string()));
             }
         }
     }
@@ -265,7 +271,7 @@ impl AtRepoSync
         let db = match Database::open(DB_NAME).await {
             Ok(db) => db,
             Err(err) => {
-                return Err(AtRepoSyncError::ThereWasAnError(err.to_string()));
+                return Err(AtRepoSyncError::Error(err.to_string()));
             }
         };
 
@@ -376,7 +382,7 @@ impl AtRepoSync
         let db = match Database::open(DB_NAME).await {
             Ok(db) => db,
             Err(err) => {
-                return Err(AtRepoSyncError::ThereWasAnError(err.to_string()));
+                return Err(AtRepoSyncError::Error(err.to_string()));
             }
         };
 
@@ -396,7 +402,7 @@ impl AtRepoSync
         .await
         {
             Ok(_) => Ok(new_player_stats),
-            Err(err) => Err(AtRepoSyncError::ThereWasAnError(err.to_string())),
+            Err(err) => Err(AtRepoSyncError::Error(err.to_string())),
         }
     }
 
@@ -440,8 +446,15 @@ impl AtRepoSync
                         synced_with_at_repo = true;
                     }
                     Err(err) => {
-                        //Just going to log errors "quietly" as I figure out how to handle them
                         log::error!("{:?}", err);
+                        match atrium_xrpc::Error::from(err) {
+                            Authentication(_) => {
+                                return Err(AtRepoSyncError::AuthErrorNeedToReLogin);
+                            }
+                            _ => {
+                                //Just going to log errors "quietly" as I figure out how to handle them
+                            }
+                        }
                     }
                 }
             }
@@ -450,7 +463,7 @@ impl AtRepoSync
         let db = match Database::open(DB_NAME).await {
             Ok(db) => db,
             Err(err) => {
-                return Err(AtRepoSyncError::ThereWasAnError(err.to_string()));
+                return Err(AtRepoSyncError::Error(err.to_string()));
             }
         };
 
@@ -470,7 +483,7 @@ impl AtRepoSync
         .await
         {
             Ok(_) => Ok(()),
-            Err(err) => Err(AtRepoSyncError::ThereWasAnError(err.to_string())),
+            Err(err) => Err(AtRepoSyncError::Error(err.to_string())),
         }
     }
 
@@ -480,13 +493,13 @@ impl AtRepoSync
         let db = match Database::open(DB_NAME).await {
             Ok(db) => db,
             Err(err) => {
-                return Err(AtRepoSyncError::ThereWasAnError(err.to_string()));
+                return Err(AtRepoSyncError::Error(err.to_string()));
             }
         };
 
         match object_get::<player::stats::RecordData>(db, STATS_STORE, SELF_KEY).await {
             Ok(stats) => Ok(stats),
-            Err(err) => Err(AtRepoSyncError::ThereWasAnError(err.to_string())),
+            Err(err) => Err(AtRepoSyncError::Error(err.to_string())),
         }
     }
 
@@ -495,7 +508,7 @@ impl AtRepoSync
         let db = match Database::open(DB_NAME).await {
             Ok(db) => db,
             Err(err) => {
-                return Err(AtRepoSyncError::ThereWasAnError(err.to_string()));
+                return Err(AtRepoSyncError::Error(err.to_string()));
             }
         };
 
@@ -581,8 +594,15 @@ impl AtRepoSync
                         synced_with_at_repo = true;
                     }
                     Err(err) => {
-                        //Just going to log errors "quietly" as I figure out how to handle them
                         log::error!("{:?}", err);
+                        match atrium_xrpc::Error::from(err) {
+                            Authentication(_) => {
+                                return Err(AtRepoSyncError::AuthErrorNeedToReLogin);
+                            }
+                            _ => {
+                                //Just going to log errors "quietly" as I figure out how to handle them
+                            }
+                        }
                     }
                 }
             }
@@ -591,7 +611,7 @@ impl AtRepoSync
         let db = match Database::open(DB_NAME).await {
             Ok(db) => db,
             Err(err) => {
-                return Err(AtRepoSyncError::ThereWasAnError(err.to_string()));
+                return Err(AtRepoSyncError::Error(err.to_string()));
             }
         };
 
@@ -611,7 +631,7 @@ impl AtRepoSync
         };
         match transaction_put(db, local_game_record.clone(), GAME_STORE, None).await {
             Ok(_) => Ok(()),
-            Err(err) => Err(AtRepoSyncError::ThereWasAnError(err.to_string())),
+            Err(err) => Err(AtRepoSyncError::Error(err.to_string())),
         }
     }
 

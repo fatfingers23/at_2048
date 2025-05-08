@@ -37,6 +37,8 @@ enum Route {
     GamePage,
     #[at("/login")]
     LoginPage,
+    #[at("/login/:did")]
+    LoginPageWithDid { did: String },
     #[at("/oauth/callback")]
     CallbackPage,
     #[at("/stats")]
@@ -53,7 +55,8 @@ enum Route {
 fn switch(routes: Route) -> Html {
     match routes {
         Route::GamePage => html! { <GamePage /> },
-        Route::LoginPage => html! { <LoginPage /> },
+        Route::LoginPage => html! { <LoginPage did={None::<String>} /> },
+        Route::LoginPageWithDid { did } => html! { <LoginPage did={Some(did)} /> },
         Route::CallbackPage => html! { <CallbackPage /> },
         Route::StatsPage => html! { <StatsPage /> },
         Route::SeedPage { seed } => html! { <SeedPage starting_seed={seed} /> },
@@ -123,7 +126,29 @@ fn Main() -> Html {
                                 return;
                             }
                         };
+
                         let agent = Agent::new(session);
+                        //TODO I dont think this actually does anything after the first token expires but keeping for now
+                        // if let Err(error) = agent.api.com.atproto.server.get_session().await {
+                        //     log::error!("Session error: {}", error);
+                        //
+                        //     match XrpcError::from(error) {
+                        //         XrpcError::Authentication(err) => {
+                        //             log::error!("{:?}", err);
+                        //             //HACK it feels like this should not work and go into a loop but I guess it only
+                        //             //redirects if you are not already on the page
+                        //             if let Some(navigator) = navigator.as_ref() {
+                        //                 navigator.push(&Route::LoginPageWithDid {
+                        //                     did: did.to_string(),
+                        //                 })
+                        //             }
+                        //         }
+                        //         _ => {
+                        //             return;
+                        //         }
+                        //     }
+                        // }
+
                         let at_repo_sync = AtRepoSync::new_logged_in_repo(agent, did);
                         match at_repo_sync.sync_profiles().await {
                             Ok(_) => {}
@@ -171,7 +196,6 @@ fn Main() -> Html {
     });
 
     html! {
-        <BrowserRouter>
             <div class="drawer">
                 <input id="my-drawer-3" type="checkbox" class="drawer-toggle" />
                 <div class="drawer-content flex flex-col">
@@ -225,15 +249,19 @@ fn Main() -> Html {
                     </ul>
                 </div>
             </div>
-        </BrowserRouter>
+
     }
 }
 
 #[function_component(App)]
 pub fn app() -> Html {
     html! {
+
+
         <OneshotProvider<StorageTask, Postcard> path="/worker.js">
+        <BrowserRouter>
             <Main />
+                </BrowserRouter>
         </OneshotProvider<StorageTask, Postcard>>
     }
 }

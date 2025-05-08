@@ -15,6 +15,7 @@ atrium-api.workspace = true
 atrium-common.workspace = true
 atrium-identity.workspace = true
 atrium-oauth.workspace = true
+atrium-xrpc.workspace = true
 twothousand-forty-eight.workspace = true
 yew-agent = "0.3.0"
 yew = { version = "0.21", features = ["csr"] }

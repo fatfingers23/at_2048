@@ -1,4 +1,4 @@
-use crate::at_repo_sync::AtRepoSync;
+use crate::at_repo_sync::{AtRepoSync, AtRepoSyncError};
 use crate::idb::{DB_NAME, GAME_STORE, RecordStorageWrapper, StorageError, object_get_index};
 use crate::oauth_client::oauth_client;
 use atrium_api::agent::Agent;
@@ -50,6 +50,7 @@ pub enum StorageResponse {
     Success,
     AlreadySynced,
     Error(StorageError),
+    RepoError(AtRepoSyncError),
 }
 
 #[oneshot]
@@ -67,17 +68,17 @@ pub async fn StorageTask(request: StorageRequest) -> StorageResponse {
             handle_game_completed(game_history, did).await
         }
     };
-    response.unwrap_or_else(|e| StorageResponse::Error(e))
+    response.unwrap_or_else(|error| StorageResponse::RepoError(error))
 }
 
 pub async fn handle_game_completed(
     game_history: String,
     did: Option<Did>,
-) -> Result<StorageResponse, StorageError> {
+) -> Result<StorageResponse, AtRepoSyncError> {
     let seeded_recording: SeededRecording = match game_history.clone().parse() {
         Ok(seeded_recording) => seeded_recording,
         Err(err) => {
-            return Err(StorageError::Error(err.to_string()));
+            return Err(AtRepoSyncError::Error(err.to_string()));
         }
     };
     let at_repo_sync = match did {
@@ -88,7 +89,7 @@ pub async fn handle_game_completed(
                 Ok(session) => session,
                 Err(err) => {
                     log::error!("{:?}", err);
-                    return Err(StorageError::Error(err.to_string()));
+                    return Err(AtRepoSyncError::Error(err.to_string()));
                 }
             };
 
@@ -101,14 +102,14 @@ pub async fn handle_game_completed(
     let db = match Database::open(DB_NAME).await {
         Ok(db) => db,
         Err(err) => {
-            return Err(StorageError::Error(err.to_string()));
+            return Err(AtRepoSyncError::Error(err.to_string()));
         }
     };
 
     let already_saved: Option<RecordStorageWrapper<game::RecordData>> =
         object_get_index(db, GAME_STORE, &seeded_recording.game_hash())
             .await
-            .map_err(|err| StorageError::Error(err.to_string()))?;
+            .map_err(|err| AtRepoSyncError::Error(err.to_string()))?;
     if let Some(already_saved) = already_saved {
         if already_saved.record.sync_status.synced_with_at_repo || !at_repo_sync.can_remote_sync() {
             log::info!("already saved or cannot sync");
@@ -124,7 +125,7 @@ pub async fn handle_game_completed(
         Ok(gamestate) => gamestate,
         Err(e) => {
             log::error!("Error reconstructing game: {:?}", e.to_string());
-            return Err(StorageError::Error(e.to_string()));
+            return Err(AtRepoSyncError::Error(e.to_string()));
         }
     };
 
@@ -145,18 +146,25 @@ pub async fn handle_game_completed(
     };
 
     // if at_repo_sync.can_remote_sync() {
-    let stats_sync = at_repo_sync
-        .sync_stats()
-        .await
-        .map_err(|err| StorageError::Error(err.to_string()));
+    let stats_sync = at_repo_sync.sync_stats().await;
     if stats_sync.is_err() {
-        log::error!("{:?}", stats_sync.err().unwrap());
+        if at_repo_sync.can_remote_sync() {
+            match stats_sync.err() {
+                None => {}
+                Some(err) => {
+                    log::error!("Error syncing stats: {:?}", err);
+                    if let AtRepoSyncError::AuthErrorNeedToReLogin = err {
+                        return Err(AtRepoSyncError::AuthErrorNeedToReLogin);
+                    }
+                }
+            }
+        }
     }
 
     let mut stats = match at_repo_sync.get_local_player_stats().await {
         Ok(stats) => match stats {
             None => {
-                return Err(StorageError::Error(
+                return Err(AtRepoSyncError::Error(
                     "No stats found. Good chance they were never created if syncing is off. Or something much worse now."
                         .to_string(),
                 ));
@@ -164,7 +172,7 @@ pub async fn handle_game_completed(
             Some(stats) => stats,
         },
         Err(err) => {
-            return Err(StorageError::Error(err.to_string()));
+            return Err(err);
         }
     };
 
@@ -193,7 +201,7 @@ pub async fn handle_game_completed(
     let reconstruction = match seeded_recording.reconstruct() {
         Ok(reconstruction) => reconstruction,
         Err(err) => {
-            return Err(StorageError::Error(err.to_string()));
+            return Err(AtRepoSyncError::Error(err.to_string()));
         }
     };
 
@@ -227,18 +235,12 @@ pub async fn handle_game_completed(
         }
     }
 
-    at_repo_sync
-        .update_a_player_stats(stats)
-        .await
-        .map_err(|err| StorageError::Error(err.to_string()))?;
+    at_repo_sync.update_a_player_stats(stats).await?;
 
     let tid = Tid::now(LimitedU32::MIN);
-    let result = at_repo_sync
+    at_repo_sync
         .create_a_new_game(record, tid, seeded_recording.game_hash())
-        .await
-        .map_err(|err| StorageError::Error(err.to_string()));
-    if result.is_err() {
-        return Err(StorageError::Error(result.err().unwrap().to_string()));
-    }
+        .await?;
+
     Ok(StorageResponse::Success)
 }

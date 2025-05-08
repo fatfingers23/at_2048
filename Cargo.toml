@@ -11,6 +11,7 @@ atrium-api = "0.25.3"
 atrium-common = "0.1.2"
 atrium-identity = "0.1.4"
 atrium-oauth = "0.1.2"
+atrium-xrpc = "0.12.3"
 atrium-xrpc-client = "0.5.14"
 twothousand-forty-eight = { version = "0.22.1", features = ["wasm", "wasm-bindgen"] }
 serde = { version = "1.0.219", features = ["derive"] }
