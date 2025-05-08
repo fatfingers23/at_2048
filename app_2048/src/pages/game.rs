@@ -632,7 +632,7 @@ pub fn board(game_props: &GameProps) -> Html {
                                         }
                                     }
                                     false => {
-                                        dispatch.set(UserStore { did: None });
+                                        dispatch.set(UserStore::default());
                                     }
                                 }
                             }
@@ -806,7 +806,7 @@ pub fn board(game_props: &GameProps) -> Html {
             />
             if state.gamestate.over {
                 // <ShareGameButtons score={state.hiscore} seed={state.history.seed} emoji_board={emoji_board(flatten_tiles.iter().map(|tile| tile.value).collect::<Vec<_>>())}/>
-                <ShareGameButtons score={state.hiscore} seed={state.history.seed}/>
+                <ShareGameButtons score={state.hiscore} seed={state.history.seed} />
             }
             // Game board
             <div

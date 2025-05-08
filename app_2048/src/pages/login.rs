@@ -84,7 +84,7 @@ pub fn login(props: &LoginProps) -> Html {
                     Err(err) => Some(err.to_string()),
                 };
                 if let Some(error) = error {
-                    dispatch.set(UserStore { did: None });
+                    dispatch.set(UserStore::default());
                     error_state_effect.set(Some(format!("Error from redirect: {}", error)));
                 }
             });

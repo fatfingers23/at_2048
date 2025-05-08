@@ -1,4 +1,4 @@
-use atrium_api::types::string::Did;
+use atrium_api::types::string::{Did, Handle};
 use serde::{Deserialize, Serialize};
 use yewdux::prelude::*;
 
@@ -7,6 +7,7 @@ use yewdux::prelude::*;
 #[derive(Clone)]
 pub struct UserStore {
     pub did: Option<Did>,
+    pub handle: Option<Handle>,
 }
 
 //Incase I need a debug listener later

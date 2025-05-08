@@ -30,40 +30,59 @@ pub fn callback() -> Html {
                     match serde_html_form::from_str::<CallbackParams>(
                         &*location.query_str().replace("?", ""),
                     ) {
-                        Ok(params) => match oauth_client.await.callback(params).await {
-                            Ok((session, _)) => {
-                                let agent = Agent::new(session);
-                                //HACK
-                                let did = agent.did().await.unwrap();
-                                dispatch.set(UserStore {
-                                    did: Some(did.clone()),
-                                });
-                                let at_repo_sync = AtRepoSync::new_logged_in_repo(agent, did);
-                                match at_repo_sync.sync_profiles().await {
-                                    Ok(_) => {}
-                                    Err(err) => {
-                                        log::error!("Error: {:?}", err.to_string());
-                                        error_view_clone.set(Some("There was an error with your login and syncing your profiles. Try again or can check the console for more details."));
-                                    }
-                                }
+                        Ok(params) => {
+                            match oauth_client.await.callback(params).await {
+                                Ok((session, _)) => {
+                                    let agent = Agent::new(session);
+                                    let did = agent.did().await.unwrap();
 
-                                match at_repo_sync.sync_stats().await {
-                                    Ok(_) => {}
-                                    Err(err) => {
-                                        log::error!("Error: {:?}", err.to_string());
-                                        error_view_clone.set(Some("There was an error with your login and syncing your stats. Try again or can check the console for more details."));
+                                    let profile = agent
+                                    .api
+                                    .app
+                                    .bsky
+                                    .actor
+                                    .get_profile(
+                                        atrium_api::app::bsky::actor::get_profile::ParametersData {
+                                            actor: atrium_api::types::string::AtIdentifier::Did(did.clone()),
+                                        }
+                                            .into(),
+                                    )
+                                    .await;
+                                    //HACK
+                                    dispatch.set(UserStore {
+                                        did: Some(did.clone()),
+                                        handle: match profile {
+                                            Ok(profile) => Some(profile.handle.clone()),
+                                            Err(_) => None,
+                                        },
+                                    });
+                                    let at_repo_sync = AtRepoSync::new_logged_in_repo(agent, did);
+                                    match at_repo_sync.sync_profiles().await {
+                                        Ok(_) => {}
+                                        Err(err) => {
+                                            log::error!("Error: {:?}", err.to_string());
+                                            error_view_clone.set(Some("There was an error with your login and syncing your profiles. Try again or can check the console for more details."));
+                                        }
                                     }
-                                }
 
-                                navigator.push(&Route::GamePage)
-                            } // None => {
-                            //     error_view_clone.set(Some("There was an error with your login. Try again or can check the console for more details."));
-                            // }
-                            Err(err) => {
-                                log::error!("Error: {:?}", err);
-                                error_view_clone.set(Some("There was an error with your login. Try again or can check the console for more details."));
+                                    match at_repo_sync.sync_stats().await {
+                                        Ok(_) => {}
+                                        Err(err) => {
+                                            log::error!("Error: {:?}", err.to_string());
+                                            error_view_clone.set(Some("There was an error with your login and syncing your stats. Try again or can check the console for more details."));
+                                        }
+                                    }
+
+                                    navigator.push(&Route::GamePage)
+                                } // None => {
+                                //     error_view_clone.set(Some("There was an error with your login. Try again or can check the console for more details."));
+                                // }
+                                Err(err) => {
+                                    log::error!("Error: {:?}", err);
+                                    error_view_clone.set(Some("There was an error with your login. Try again or can check the console for more details."));
+                                }
                             }
-                        },
+                        }
                         Err(_) => {
                             error_view_clone.set(Some("No call back parameters found in the URL."));
                         }
