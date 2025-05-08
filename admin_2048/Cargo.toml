@@ -1,0 +1,19 @@
+[package]
+name = "admin_2048"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+types-2048 = { path = "../types_2048" }
+clap = { version = "4.5.37", features = ["derive"] }
+tokio.workspace = true
+anyhow = "1.0.97"
+atrium-api.workspace = true
+atrium-common.workspace = true
+atrium-identity.workspace = true
+atrium-xrpc-client.workspace = true
+atrium-oauth.workspace = true
+env_logger = "0.11.8"
+log = "0.4.27"
+hickory-resolver = "0.24.1"
+twothousand-forty-eight.workspace = true

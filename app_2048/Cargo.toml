@@ -15,7 +15,7 @@ atrium-api.workspace = true
 atrium-common.workspace = true
 atrium-identity.workspace = true
 atrium-oauth.workspace = true
-twothousand-forty-eight = { version = "0.22.1", features = ["wasm", "wasm-bindgen"] }
+twothousand-forty-eight.workspace = true
 yew-agent = "0.3.0"
 yew = { version = "0.21", features = ["csr"] }
 yew-router = "0.18.0"
