@@ -1,5 +1,7 @@
 use crate::atrium_stores::{IndexDBSessionStore, IndexDBStateStore};
 use crate::resolver::ApiDNSTxtResolver;
+use atrium_api::types::string::Did;
+use atrium_common::resolver::Resolver;
 use atrium_identity::{
     did::{CommonDidResolver, CommonDidResolverConfig, DEFAULT_PLC_DIRECTORY_URL},
     handle::{AtprotoHandleResolver, AtprotoHandleResolverConfig},
@@ -18,6 +20,31 @@ pub type OAuthClientType = Arc<
         AtprotoHandleResolver<ApiDNSTxtResolver, DefaultHttpClient>,
     >,
 >;
+
+pub async fn handle_resolve_from_did(did: Did) -> Option<String> {
+    let http_client = Arc::new(DefaultHttpClient::default());
+    let did_resolver = CommonDidResolver::new(CommonDidResolverConfig {
+        plc_directory_url: DEFAULT_PLC_DIRECTORY_URL.to_string(),
+        http_client: http_client.clone(),
+    });
+
+    let resolved_did = did_resolver.resolve(&did).await;
+    match resolved_did {
+        Ok(doc) => match doc.also_known_as {
+            None => None,
+            Some(known_as) => {
+                if known_as.is_empty() {
+                    return None;
+                }
+                Some(known_as[0].clone().replace("at://", ""))
+            }
+        },
+        Err(err) => {
+            log::error!("Error resolving did: {}", err);
+            None
+        }
+    }
+}
 
 pub async fn oauth_client() -> OAuthClientType {
     // Create a new OAuth client

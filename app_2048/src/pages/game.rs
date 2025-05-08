@@ -1,14 +1,17 @@
+use crate::Route;
 use crate::agent::{StorageRequest, StorageResponse, StorageTask};
+use crate::at_repo_sync::AtRepoSyncError;
 use crate::idb::{
     CURRENT_GAME_STORE, DB_NAME, SELF_KEY, STATS_STORE, object_delete, object_get, transaction_put,
 };
 use crate::store::UserStore;
 use atrium_api::types::string::Datetime;
-use gloo::dialogs::alert;
+use gloo::dialogs::{alert, confirm};
 use gloo::events::EventListener;
 use gloo::timers::callback::Timeout;
 use indexed_db_futures::database::Database;
 use js_sys::encode_uri_component;
+use log::info;
 use numfmt::{Formatter, Precision};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -25,6 +28,7 @@ use yew::{
 };
 use yew_agent::oneshot::use_oneshot_runner;
 use yew_hooks::use_effect_once;
+use yew_router::hooks::use_navigator;
 use yewdux::use_store;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -560,9 +564,10 @@ pub struct GameProps {
 #[function_component(Board)]
 pub fn board(game_props: &GameProps) -> Html {
     let state = use_reducer(|| game_props.state.clone());
-    let (user_store, _) = use_store::<UserStore>();
+    let (user_store, dispatch) = use_store::<UserStore>();
     let move_delay: Rc<RefCell<Option<Timeout>>> = use_mut_ref(|| None);
     let storage_action_not_running = use_state(|| true);
+    let navigator = use_navigator().unwrap();
 
     let storage_task = use_oneshot_runner::<StorageTask>();
     let storage_agent = storage_task.clone();
@@ -602,7 +607,7 @@ pub fn board(game_props: &GameProps) -> Html {
             let did = user_store.did.clone();
             let storage_action_not_running_clone = storage_action_not_running.clone();
             spawn_local(async move {
-                let request = StorageRequest::GameCompleted(history_string, did);
+                let request = StorageRequest::GameCompleted(history_string, did.clone());
                 let result = storage_agent.run(request).await;
                 match result {
                     StorageResponse::Error(err) => {
@@ -610,6 +615,29 @@ pub fn board(game_props: &GameProps) -> Html {
                         let message_sorry = "Sorry there was an error saving your game. This is still in alpha and has some bugs so please excuse us. If you are logged in with your AT Proto account may try relogging and refreshing this page without hitting new game. It will try to sync again. Sorry again and thanks for trying out at://2048!";
                         alert(message_sorry);
                         log::error!("Error saving game: {:?}", err.to_string());
+                    }
+                    StorageResponse::RepoError(error) => {
+                        log::error!("Error saving game: {:?}", error.to_string());
+                        match error {
+                            AtRepoSyncError::AuthErrorNeedToReLogin => {
+                                match confirm(
+                                    "Your AT Protocol session has expired. You need to relogin to save your game to your profile. Press confirm to be redirected to login page.",
+                                ) {
+                                    true => {
+                                        if let Some(did) = did.as_ref() {
+                                            info!("Here");
+                                            navigator.push(&Route::LoginPageWithDid {
+                                                did: did.to_string(),
+                                            })
+                                        }
+                                    }
+                                    false => {
+                                        dispatch.set(UserStore { did: None });
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
                     }
                     _ => {
                         storage_action_not_running_clone.set(true);
