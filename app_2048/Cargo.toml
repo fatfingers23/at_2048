@@ -39,5 +39,6 @@ indexed_db_futures = { version = "0.6.1", features = ["serde", "cursors", "versi
 yew-hooks = "0.3.3"
 yewdux = "0.11.0"
 xxhash-rust = { version = "0.8.15", features = ["const_xxh3"] }
+implicit-clone = { version = "0.6.0", features = ["map"] }
 #hickory-resolver = { version = "0.24.1", features = ["dns-over-https", "dns-over-https-rustls", ""] }
 

@@ -5,6 +5,7 @@ use crate::idb::{DB_NAME, SESSIONS_STORE, object_delete};
 use crate::oauth_client::oauth_client;
 use crate::pages::callback::CallbackPage;
 use crate::pages::game::GamePage;
+use crate::pages::history::HistoryPage;
 use crate::pages::login::LoginPage;
 use crate::pages::seed::SeedPage;
 use crate::pages::stats::StatsPage;
@@ -47,6 +48,8 @@ enum Route {
     SeedPage { seed: u32 },
     #[at("/seed")]
     SeedPageNoSeed,
+    #[at("/history")]
+    HistoryPage,
     #[not_found]
     #[at("/404")]
     NotFound,
@@ -61,6 +64,9 @@ fn switch(routes: Route) -> Html {
         Route::StatsPage => html! { <StatsPage /> },
         Route::SeedPage { seed } => html! { <SeedPage starting_seed={seed} /> },
         Route::SeedPageNoSeed => html! { <SeedPage starting_seed={None} /> },
+        Route::HistoryPage => {
+            html! { <HistoryPage/>}
+        }
         Route::NotFound => html! { <h1>{ "404" }</h1> },
     }
 }
@@ -128,27 +134,6 @@ fn Main() -> Html {
                         };
 
                         let agent = Agent::new(session);
-                        //TODO I dont think this actually does anything after the first token expires but keeping for now
-                        // if let Err(error) = agent.api.com.atproto.server.get_session().await {
-                        //     log::error!("Session error: {}", error);
-                        //
-                        //     match XrpcError::from(error) {
-                        //         XrpcError::Authentication(err) => {
-                        //             log::error!("{:?}", err);
-                        //             //HACK it feels like this should not work and go into a loop but I guess it only
-                        //             //redirects if you are not already on the page
-                        //             if let Some(navigator) = navigator.as_ref() {
-                        //                 navigator.push(&Route::LoginPageWithDid {
-                        //                     did: did.to_string(),
-                        //                 })
-                        //             }
-                        //         }
-                        //         _ => {
-                        //             return;
-                        //         }
-                        //     }
-                        // }
-
                         let at_repo_sync = AtRepoSync::new_logged_in_repo(agent, did);
                         match at_repo_sync.sync_profiles().await {
                             Ok(_) => {}
