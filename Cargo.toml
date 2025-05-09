@@ -1,6 +1,6 @@
 [workspace]
 members = ["admin_2048",
-    "api_2048",
+    "appview_2048",
     "client_2048",
     "types_2048",
 ]
