@@ -1,5 +1,5 @@
 [package]
-name = "app_2048"
+name = "client_2048"
 version = "0.1.0"
 edition = "2024"
 description = "A 2048 game that syncs to your AT Protocol repo"

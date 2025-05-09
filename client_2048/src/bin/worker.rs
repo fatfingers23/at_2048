@@ -1,4 +1,4 @@
-use app_2048::agent::{Postcard, StorageTask};
+use client_2048::agent::{Postcard, StorageTask};
 use yew_agent::Registrable;
 
 fn main() {

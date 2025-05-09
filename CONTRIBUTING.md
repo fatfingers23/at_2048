@@ -36,7 +36,7 @@ Now, you have two choices:
 cargo install trunk wasm-bindgen-cli
 ```
 
-- Go to the `app_2048` directory: `cd at_2048/app_2048`
+- Go to the `client_2048` directory: `cd at_2048/client_2048`
 - Run `npm install`
 
 ### Setup with Nix (Optional)
@@ -46,7 +46,7 @@ cargo install trunk wasm-bindgen-cli
 - `cd at_2048`
 - `direnv allow`
 - Make a cup of tea while dependencies are being downloaded
-- Once it's done, (dependencies loading, not tea) `cd app_2048`
+- Once it's done, (dependencies loading, not tea) `cd client_2048`
 - `npm install`
 
 After that, it might be a good idea to run `nix flake update` and see if
@@ -55,7 +55,7 @@ ensure you have the latest packages installed.
 
 ### Running the project
 
-Open the `app_2048` directory and run `trunk serve`. You should see something
+Open the `client_2048` directory and run `trunk serve`. You should see something
 like this:
 
 ```
