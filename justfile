@@ -8,8 +8,8 @@ release:
     #trunk build --config ./client_2048/Trunk.toml --release
     docker buildx build \
               --platform linux/arm64 \
-              -t fatfingers23/at_2048_api:latest \
-              -f dockerfiles/Api.Dockerfile \
+              -t fatfingers23/at_2048_appview:latest \
+              -f dockerfiles/AppView.Dockerfile \
               --push .
     docker buildx build \
               --platform linux/arm64 \
