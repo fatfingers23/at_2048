@@ -163,6 +163,8 @@ async fn create_a_temp_leaderboard() -> anyhow::Result<()> {
                 }
                 Err(err) => {
                     log::error!("Error getting top game: {}", err);
+                    log::error!("Skipping repo: {}", repo.did.to_string());
+                    continue;
                 }
             }
         }
@@ -235,11 +237,15 @@ async fn get_top_game(
                         }
                         Err(err) => {
                             log::error!("Error parsing game: {}", err);
+                            continue;
                         }
                     }
                 }
             }
-            Err(e) => log::error!("Error getting top game: {}", e),
+            Err(e) => {
+                log::error!("Error getting top game: {}", e);
+                break;
+            }
         };
     }
 
