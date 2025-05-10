@@ -1,47 +1,136 @@
-use crate::at_repo_sync::AtRepoSync;
 use crate::store::UserStore;
-use atrium_api::agent::Agent;
-use atrium_api::types::string::Did;
+use atrium_api::types::string::{Datetime, Did};
 use std::rc::Rc;
-use types_2048::blue;
+use types_2048::blue::_2048::defs::SyncStatusData;
+use types_2048::blue::_2048::game;
+use wasm_bindgen::JsCast;
+use web_sys::HtmlElement;
 use yew::prelude::*;
 use yew_hooks::{use_async, use_async_with_options};
+use yewdux::context_provider::Props;
 use yewdux::use_store;
 
-struct HistoryState {
-    games: Vec<types_2048::blue::_2048::game::RecordData>,
+#[derive(Clone, PartialEq, Default)]
+pub enum TabState {
+    #[default]
+    Local,
+    Remote,
+    Both,
 }
 
-pub enum HistoryAction {
-    GetLocalGames,
+impl From<TabState> for String {
+    fn from(tab: TabState) -> Self {
+        match tab {
+            TabState::Local => "Local".to_string(),
+            TabState::Remote => "Remote".to_string(),
+            TabState::Both => "Both".to_string(),
+        }
+    }
 }
 
-impl Reducible for HistoryState {
-    /// Reducer Action Type
-    type Action = HistoryAction;
+impl From<TabState> for &'static str {
+    fn from(tab: TabState) -> Self {
+        match tab {
+            TabState::Local => "Local",
+            TabState::Remote => "Remote",
+            TabState::Both => "Both",
+        }
+    }
+}
 
-    /// Reducer Function
-    fn reduce(self: Rc<Self>, action: Self::Action) -> Rc<Self> {
-        let games: Vec<blue::_2048::game::RecordData> = match action {
-            HistoryAction::GetLocalGames => {
-                // let db = match Database::open(DB_NAME).await {
-                //     Ok(db) => db,
-                //     Err(err) => {
-                //         log::error!("{}", err);
-                //         vec![]
-                //     }
-                // };
-                vec![]
-            }
+#[derive(Properties, Clone, PartialEq)]
+struct HistoryTabProps {
+    action: Callback<TabState>,
+}
+#[function_component(HistoryTab)]
+fn tab_component(props: &HistoryTabProps) -> Html {
+    let tab_state = use_state(|| TabState::default());
+
+    let tab_event_clone = tab_state.clone();
+    let action = props.action.clone();
+    let onclick = Callback::from(move |event: MouseEvent| {
+        let element = event.target().unwrap().dyn_into::<HtmlElement>().unwrap();
+        let tab_name = element.text_content().unwrap();
+        let local_tab_state = match tab_name.as_str() {
+            "Local" => TabState::Local,
+            "Remote" => TabState::Remote,
+            "Both" => TabState::Both,
+            _ => TabState::Local,
         };
+        action.emit(local_tab_state.clone());
+        tab_event_clone.set(local_tab_state)
+    });
 
-        Self { games }.into()
+    html! {
+        <div role="tablist" class="tabs tabs-lift tabs-lg">
+            <a
+                onclick={onclick.clone()}
+                role="tab"
+                class={classes!("tab", (*tab_state == TabState::Local).then(|| Some("tab-active")))}
+            >
+                { "Local" }
+            </a>
+            <a
+                onclick={onclick.clone()}
+                role="tab"
+                class={classes!("tab", (*tab_state == TabState::Remote).then(|| Some("tab-active")))}
+            >
+                { "Remote" }
+            </a>
+            <a
+                {onclick}
+                role="tab"
+                class={classes!("tab", (*tab_state == TabState::Both).then(|| Some("tab-active")))}
+            >
+                { "Both" }
+            </a>
+        </div>
+    }
+}
+
+#[derive(Properties, Clone, PartialEq)]
+struct GameTileProps {
+    game: Rc<game::RecordData>,
+}
+
+#[function_component(GameTile)]
+fn game_tile(props: &GameTileProps) -> Html {
+    // <div class="bg-base-200 p-4 rounded-lg shadow">
+    //     // <h3>{format!("Game {}", game)}</h3>
+    //     <p>{format!("Score: {}", game.current_score)}</p>
+    //     // <p>{format!("Date: {}", chrono::NaiveDateTime::from_timestamp_opt(game.timestamp, 0).unwrap().format("%Y-%m-%d"))}</p>
+    //     </div>
+    html! {
+        <div class="bg-base-100 shadow-lg rounded-lg md:p-6 p-1">
+            <div class="w-full max-w-2xl mx-auto">
+                <h3>{ "Game 1" }</h3>
+                <p>{ format!("Score: {}", props.game.current_score) }</p>
+                <p>{ "Date: 2021-01-01" }</p>
+        </div>
+        </div>
     }
 }
 
 #[function_component(HistoryPage)]
 pub fn history() -> Html {
+    log::info!("Ribbit");
     let (user_store, _) = use_store::<UserStore>();
+    let place_holder_games = vec![Rc::new(game::RecordData {
+        completed: false,
+        created_at: Datetime::now(),
+        current_score: 0,
+        seeded_recording: "".to_string(),
+        sync_status: SyncStatusData {
+            created_at: Datetime::now(),
+            hash: "".to_string(),
+            synced_with_at_repo: false,
+            updated_at: Datetime::now(),
+        }
+        .into(),
+        won: false,
+    })];
+    let display_games = use_state(|| Rc::new(place_holder_games));
+
     let at_repo_sync = match &user_store.did {
         Some(did) => {
             // let oauth_client = crate::oauth_client::oauth_client();
@@ -57,30 +146,32 @@ pub fn history() -> Html {
         }
         None => {}
     };
+
+    let tab_click_callback = Callback::from(move |tab_state: TabState| match tab_state {
+        //TODO do async stuff in here with spawn locla and set outside state?
+        TabState::Local => {
+            log::info!("Local");
+        }
+        TabState::Remote => {}
+        TabState::Both => {}
+    });
     // let local_games = use_async(async move {});
     html! {
-        <div class="p-4">
-            <div class="max-w-4xl mx-auto space-y-4 justify-center">
-                <div
-                    class=" bg-base-100 relative flex min-h-[6rem] max-w-4xl min-w-[18rem] flex-wrap items-center justify-center gap-2 overflow-x-hidden bg-cover bg-top p-4 xl:py-10 "
-                >
-                    <div role="tablist" class="tabs tabs-lift">
-                        <a role="tab" class="tab">{ "Local" }</a>
-                        <a role="tab" class="tab tab-active">{ "Remote" }</a>
-                        <a role="tab" class="tab">{ "Both" }</a>
+        <div class="md:p-4 p-1">
+            <div class="max-w-4xl mx-auto space-y-6 justify-center">
+                <h1 class="text-4xl font-bold text-center md:mb-6 mb-1">{ "Game History" }</h1>
+                <div class="bg-base-100 shadow-lg rounded-lg md:p-6 p-1">
+                    <div class="w-full max-w-2xl mx-auto">
+                        <HistoryTab action={tab_click_callback} />
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            { (*display_games).iter().map(|game| {
+                                html! {
+                                    <GameTile game={game} />
+                                }
+                            }).collect::<Html>() }
+                        </div>
                     </div>
                 </div>
-                // Header
-                // <div class="card bg-base-100 shadow-xl">
-                //     <div class="card-body">
-                //         <h2 class="card-title text-3xl font-bold">{ "Your at://2048 Stats" }</h2>
-                //         <p class="text-base-content/70">
-                //             { "Track your progress and achievements" }
-                //         </p>
-                //     </div>
-                // </div>
-                // Main Stats Grid
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" />
             </div>
         </div>
     }
