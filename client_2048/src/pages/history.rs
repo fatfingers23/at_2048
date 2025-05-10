@@ -1,10 +1,14 @@
+use crate::at_repo_sync::AtRepoSyncError;
+use crate::idb::{DB_NAME, GAME_STORE, RecordStorageWrapper, paginated_cursor};
 use crate::store::UserStore;
 use atrium_api::types::string::{Datetime, Did};
+use indexed_db_futures::database::Database;
 use std::rc::Rc;
 use types_2048::blue::_2048::defs::SyncStatusData;
 use types_2048::blue::_2048::game;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlElement;
+use yew::platform::spawn_local;
 use yew::prelude::*;
 use yew_hooks::{use_async, use_async_with_options};
 use yewdux::context_provider::Props;
@@ -105,7 +109,7 @@ fn game_tile(props: &GameTileProps) -> Html {
             <div class="w-full max-w-2xl mx-auto">
                 <h3>{ "Game 1" }</h3>
                 <p>{ format!("Score: {}", props.game.current_score) }</p>
-                <p>{ "Date: 2021-01-01" }</p>
+                <p>{ format!("Date: {}", props.game.created_at.as_str()) }</p>
         </div>
         </div>
     }
@@ -147,14 +151,32 @@ pub fn history() -> Html {
         None => {}
     };
 
-    let tab_click_callback = Callback::from(move |tab_state: TabState| match tab_state {
-        //TODO do async stuff in here with spawn locla and set outside state?
-        TabState::Local => {
-            log::info!("Local");
-        }
-        TabState::Remote => {}
-        TabState::Both => {}
-    });
+    let tab_click_callback = {
+        let display_games = display_games.clone();
+        Callback::from(move |tab_state: TabState| {
+            let display_games = display_games.clone();
+            match tab_state {
+                //TODO do async stuff in here with spawn locla and set outside state?
+                TabState::Local => spawn_local(async move {
+                    let db = Database::open(DB_NAME)
+                        .await
+                        .map_err(|e| AtRepoSyncError::Error(e.to_string()))
+                        .unwrap();
+                    let local_games: Vec<RecordStorageWrapper<game::RecordData>> =
+                        paginated_cursor(db, GAME_STORE, 10, 0).await.unwrap();
+                    log::info!("{:?}", local_games);
+                    display_games.set(Rc::new(
+                        local_games
+                            .into_iter()
+                            .map(|wrapper| Rc::new(wrapper.record))
+                            .collect(),
+                    ));
+                }),
+                TabState::Remote => {}
+                TabState::Both => {}
+            }
+        })
+    };
     // let local_games = use_async(async move {});
     html! {
         <div class="md:p-4 p-1">
@@ -164,9 +186,9 @@ pub fn history() -> Html {
                     <div class="w-full max-w-2xl mx-auto">
                         <HistoryTab action={tab_click_callback} />
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            { (*display_games).iter().map(|game| {
+                            { (*display_games).iter().enumerate().map(|(i, game)| {
                                 html! {
-                                    <GameTile game={game} />
+                                    <GameTile key={i} game={game} />
                                 }
                             }).collect::<Html>() }
                         </div>

@@ -635,6 +635,14 @@ impl AtRepoSync
         }
     }
 
+    pub async fn local_game_cursor(&self, count: u32, skip: u32) -> Result<(), AtRepoSyncError> {
+        let db = Database::open(DB_NAME)
+            .await
+            .map_err(|e| AtRepoSyncError::Error(e.to_string()))?;
+
+        Err(AtRepoSyncError::Error("Not implemented".to_string()))
+    }
+
     //TODO just scraping the current game sync for now. Dont think it is needed
     // pub async fn get_current_game(&self) -> Result<game::RecordData, AtRepoSyncError> {
     //     //TODO change to be same as ATProto repo where we get current game from player profile and not local profile
