@@ -4,13 +4,18 @@ use crate::store::UserStore;
 use atrium_api::types::string::{Datetime, Did};
 use indexed_db_futures::database::Database;
 use std::rc::Rc;
+use twothousand_forty_eight::unified::validation::{Validatable, ValidationResult};
+use twothousand_forty_eight::v2::io::SeededRecordingParseError;
+use twothousand_forty_eight::v2::recording::SeededRecording;
+use twothousand_forty_eight::v2::replay::MoveReplayError;
 use types_2048::blue::_2048::defs::SyncStatusData;
 use types_2048::blue::_2048::game;
+use types_2048::blue::_2048::game::RecordData;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlElement;
 use yew::platform::spawn_local;
 use yew::prelude::*;
-use yew_hooks::{use_async, use_async_with_options};
+use yew_hooks::{use_async, use_async_with_options, use_effect_once, use_mount};
 use yewdux::context_provider::Props;
 use yewdux::use_store;
 
@@ -104,36 +109,54 @@ fn game_tile(props: &GameTileProps) -> Html {
     //     <p>{format!("Score: {}", game.current_score)}</p>
     //     // <p>{format!("Date: {}", chrono::NaiveDateTime::from_timestamp_opt(game.timestamp, 0).unwrap().format("%Y-%m-%d"))}</p>
     //     </div>
+    let game_history: Option<ValidationResult> =
+        match props.game.seeded_recording.parse::<SeededRecording>() {
+            Ok(history) => match history.validate() {
+                Ok(history) => Some(history),
+                Err(err) => {
+                    log::error!("{:?}", err);
+                    None
+                }
+            },
+            Err(err) => {
+                log::error!("{:?}", err);
+                None
+            }
+        };
+
     html! {
         <div class="bg-base-100 shadow-lg rounded-lg md:p-6 p-1">
             <div class="w-full max-w-2xl mx-auto">
                 <h3>{ "Game 1" }</h3>
                 <p>{ format!("Score: {}", props.game.current_score) }</p>
                 <p>{ format!("Date: {}", props.game.created_at.as_str()) }</p>
-        </div>
+            </div>
         </div>
     }
+}
+
+async fn get_local_games() -> Result<Rc<Vec<Rc<game::RecordData>>>, AtRepoSyncError> {
+    log::info!("Getting local games");
+    let db = Database::open(DB_NAME)
+        .await
+        .map_err(|e| AtRepoSyncError::Error(e.to_string()))
+        .unwrap();
+    let local_games: Vec<RecordStorageWrapper<game::RecordData>> =
+        paginated_cursor(db, GAME_STORE, 10, 0).await.unwrap();
+    Ok(Rc::new(
+        local_games
+            .into_iter()
+            .map(|wrapper| Rc::new(wrapper.record))
+            .collect(),
+    ))
 }
 
 #[function_component(HistoryPage)]
 pub fn history() -> Html {
     log::info!("Ribbit");
     let (user_store, _) = use_store::<UserStore>();
-    let place_holder_games = vec![Rc::new(game::RecordData {
-        completed: false,
-        created_at: Datetime::now(),
-        current_score: 0,
-        seeded_recording: "".to_string(),
-        sync_status: SyncStatusData {
-            created_at: Datetime::now(),
-            hash: "".to_string(),
-            synced_with_at_repo: false,
-            updated_at: Datetime::now(),
-        }
-        .into(),
-        won: false,
-    })];
-    let display_games = use_state(|| Rc::new(place_holder_games));
+
+    let display_games = use_state(|| Rc::new(vec![]));
 
     let at_repo_sync = match &user_store.did {
         Some(did) => {
@@ -151,27 +174,28 @@ pub fn history() -> Html {
         None => {}
     };
 
+    let display_games_for_mount = display_games.clone();
+    use_effect_once(move || {
+        log::info!("Mounted");
+        spawn_local(async move {
+            match get_local_games().await {
+                Ok(games) => &display_games.set(games),
+                Err(err) => {
+                    log::error!("{:?}", err);
+                    &()
+                }
+            };
+        });
+        || ()
+    });
+
     let tab_click_callback = {
-        let display_games = display_games.clone();
+        let display_games = display_games_for_mount.clone();
         Callback::from(move |tab_state: TabState| {
             let display_games = display_games.clone();
             match tab_state {
                 //TODO do async stuff in here with spawn locla and set outside state?
-                TabState::Local => spawn_local(async move {
-                    let db = Database::open(DB_NAME)
-                        .await
-                        .map_err(|e| AtRepoSyncError::Error(e.to_string()))
-                        .unwrap();
-                    let local_games: Vec<RecordStorageWrapper<game::RecordData>> =
-                        paginated_cursor(db, GAME_STORE, 10, 0).await.unwrap();
-                    log::info!("{:?}", local_games);
-                    display_games.set(Rc::new(
-                        local_games
-                            .into_iter()
-                            .map(|wrapper| Rc::new(wrapper.record))
-                            .collect(),
-                    ));
-                }),
+                TabState::Local => spawn_local(async move {}),
                 TabState::Remote => {}
                 TabState::Both => {}
             }
@@ -186,7 +210,7 @@ pub fn history() -> Html {
                     <div class="w-full max-w-2xl mx-auto">
                         <HistoryTab action={tab_click_callback} />
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            { (*display_games).iter().enumerate().map(|(i, game)| {
+                            { (*display_games_for_mount).iter().enumerate().map(|(i, game)| {
                                 html! {
                                     <GameTile key={i} game={game} />
                                 }
