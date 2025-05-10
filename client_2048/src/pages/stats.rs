@@ -75,7 +75,7 @@ pub fn stats() -> Html {
                     }
                 }
                 Some(did) => {
-                    let oauth_client = crate::oauth_client::oauth_client().await;
+                    let oauth_client = crate::oauth_client::oauth_client();
                     let session = match oauth_client.restore(&did).await {
                         Ok(session) => session,
                         Err(err) => {
@@ -132,7 +132,7 @@ pub fn stats() -> Html {
         let total_games_formatted = formatter.fmt2(stats_state.games_played);
 
         html! {
-            <div class="min-h-screen bg-base-200 p-4">
+            <div class="p-4">
                 <div class="max-w-4xl mx-auto space-y-4">
                     // Header
                     <div class="card bg-base-100 shadow-xl">

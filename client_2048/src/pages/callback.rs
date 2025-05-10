@@ -31,7 +31,7 @@ pub fn callback() -> Html {
                         &*location.query_str().replace("?", ""),
                     ) {
                         Ok(params) => {
-                            match oauth_client.await.callback(params).await {
+                            match oauth_client.callback(params).await {
                                 Ok((session, _)) => {
                                     let agent = Agent::new(session);
                                     let did = agent.did().await.unwrap();

@@ -46,7 +46,7 @@ pub async fn handle_resolve_from_did(did: Did) -> Option<String> {
     }
 }
 
-pub async fn oauth_client() -> OAuthClientType {
+pub fn oauth_client() -> OAuthClientType {
     // Create a new OAuth client
     let http_client = Arc::new(DefaultHttpClient::default());
     let session_store = IndexDBSessionStore::new();

@@ -14,7 +14,7 @@ use atrium_api::agent::Agent;
 use gloo_utils::document;
 use indexed_db_futures::database::Database;
 use wasm_bindgen::JsCast;
-use web_sys::HtmlInputElement;
+use web_sys::{HtmlElement, HtmlInputElement};
 use yew::platform::spawn_local;
 use yew::prelude::*;
 use yew_agent::oneshot::OneshotProvider;
@@ -88,6 +88,19 @@ fn Main() -> Html {
     let menu_entry_onclick = Callback::from(move |_: MouseEvent| {
         check_drawer_open();
     });
+
+    let submenu_entry_onclick = Callback::from(move |_: MouseEvent| {
+        let collection = document().get_elements_by_class_name("lg:dropdown");
+        for i in 0..collection.length() {
+            log::info!("{:?}", i);
+            if let Some(element) = collection.item(i) {
+                let element: HtmlElement = element.unchecked_into();
+                let _ = element.remove_attribute("open");
+            }
+        }
+        check_drawer_open();
+    });
+
     let user_store_clone = user_store.clone();
     let dispatch_clone = dispatch.clone();
     //logout callback
@@ -125,7 +138,7 @@ fn Main() -> Html {
                 match user_store_clone.did.clone() {
                     None => {}
                     Some(did) => {
-                        let oauth_client = oauth_client().await;
+                        let oauth_client = oauth_client();
                         let session = match oauth_client.restore(&did).await {
                             Ok(session) => session,
                             Err(err) => {
@@ -160,16 +173,16 @@ fn Main() -> Html {
         html! {<li key=1 onclick={menu_entry_onclick.clone()}><Link<Route> to={Route::GamePage}>{ "Play" }</Link<Route>></li>},
         html! {
         <li key={2}>
-            <details>
+            <details class="lg:dropdown">
              <summary>{
                 match &user_store.handle {
                     Some(handle) => handle.to_string(),
                     None => "Profile".to_string()
                 }
             }</summary>
-             <ul class="p-2">
-               <li onclick={menu_entry_onclick.clone()}><Link<Route> to={Route::StatsPage}>{ "Stats" }</Link<Route>></li>
-               <li onclick={menu_entry_onclick.clone()}><Link<Route> to={Route::HistoryPage}>{ "History" }</Link<Route>></li>
+             <ul class="lg:menu lg:dropdown-content lg:bg-base-100 lg:rounded-box z-1 lg:w-52 p-2 lg:shadow-sm">
+               <li onclick={submenu_entry_onclick.clone()}><Link<Route> to={Route::StatsPage}>{ "Stats" }</Link<Route>></li>
+               <li onclick={submenu_entry_onclick.clone()}><Link<Route> to={Route::HistoryPage}>{ "History" }</Link<Route>></li>
              </ul>
             </details>
            </li>

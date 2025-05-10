@@ -12,7 +12,7 @@ use yew_hooks::use_effect_once;
 use yewdux::use_store;
 
 pub async fn redirect_to_auth(handle: String) -> Result<(), String> {
-    let client = oauth_client().await;
+    let client = oauth_client();
     let oauth_client = client.clone();
 
     let url = oauth_client

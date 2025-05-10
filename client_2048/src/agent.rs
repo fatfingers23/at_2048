@@ -84,7 +84,7 @@ pub async fn handle_game_completed(
     let at_repo_sync = match did {
         None => AtRepoSync::new_local_repo(),
         Some(did) => {
-            let oauth_client = oauth_client().await;
+            let oauth_client = oauth_client();
             let session = match oauth_client.restore(&did).await {
                 Ok(session) => session,
                 Err(err) => {

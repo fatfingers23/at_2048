@@ -19,7 +19,7 @@ twothousand-forty-eight.workspace = true
 yew-agent = "0.3.0"
 yew = { version = "0.21", features = ["csr"] }
 yew-router = "0.18.0"
-web-sys = { version = "0.3.77", features = ["default", "HtmlElement", "HtmlSelectElement", "HtmlHtmlElement", "TouchList", "TouchEvent", "Touch", "MediaQueryList"] }
+web-sys = { version = "0.3.77", features = ["default", "HtmlElement", "HtmlSelectElement", "HtmlHtmlElement", "TouchList", "TouchEvent", "Touch", "MediaQueryList", "HtmlCollection"] }
 rand = "0.8.5"
 log = "0.4.27"
 wasm-logger = "0.2.0"

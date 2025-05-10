@@ -1,6 +1,12 @@
+use crate::at_repo_sync::AtRepoSync;
+use crate::store::UserStore;
+use atrium_api::agent::Agent;
+use atrium_api::types::string::Did;
 use std::rc::Rc;
 use types_2048::blue;
 use yew::prelude::*;
+use yew_hooks::{use_async, use_async_with_options};
+use yewdux::use_store;
 
 struct HistoryState {
     games: Vec<types_2048::blue::_2048::game::RecordData>,
@@ -35,23 +41,23 @@ impl Reducible for HistoryState {
 
 #[function_component(HistoryPage)]
 pub fn history() -> Html {
-    // let game_history = use_state(IArray::<types_2048::blue::_2048::game::RecordData>::default);
-    // let onkeyup = {
-    //     let folks = folks.clone();
-    //     Callback::from(move |e: KeyboardEvent| {
-    //         if e.key() == "Enter" {
-    //             let event: Event = e.dyn_into().unwrap_throw();
-    //             let event_target = event.target().unwrap_throw();
-    //             let target: HtmlInputElement = event_target.dyn_into().unwrap_throw();
-    //             let name = target.value();
-    //             target.set_value("");
-    //             let mut vec = folks.to_vec();
-    //             vec.push(IString::from(name));
-    //             folks.set(IArray::from(vec));
-    //         }
-    //     })
-    // };
-
+    let (user_store, _) = use_store::<UserStore>();
+    let at_repo_sync = match &user_store.did {
+        Some(did) => {
+            // let oauth_client = crate::oauth_client::oauth_client();
+            // let session = match oauth_client.restore(&did).await {
+            //     Ok(session) => session,
+            //     Err(err) => {
+            //         log::error!("{:?}", err);
+            //         return;
+            //     }
+            // };
+            // let agent = Agent::new(session);
+            // let at_repo_sync = AtRepoSync::new_logged_in_repo(agent, did);
+        }
+        None => {}
+    };
+    // let local_games = use_async(async move {});
     html! {
         <div class="p-4">
             <div class="max-w-4xl mx-auto space-y-4 justify-center">
