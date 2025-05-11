@@ -67,7 +67,6 @@ impl std::fmt::Display for AtRepoSyncError {
     }
 }
 
-// #[derive(Clone)]
 pub struct AtRepoSync
 // where
 //     Repo: AtRepoSyncTrait,
@@ -635,8 +634,8 @@ impl AtRepoSync
         }
     }
 
-    pub async fn local_game_cursor(&self, count: u32, skip: u32) -> Result<(), AtRepoSyncError> {
-        let db = Database::open(DB_NAME)
+    pub async fn _local_game_cursor(&self, _count: u32, _skip: u32) -> Result<(), AtRepoSyncError> {
+        let _db = Database::open(DB_NAME)
             .await
             .map_err(|e| AtRepoSyncError::Error(e.to_string()))?;
 

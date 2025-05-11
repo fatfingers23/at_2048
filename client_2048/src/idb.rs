@@ -1,4 +1,3 @@
-use crate::at_repo_sync::AtRepoSyncError;
 use atrium_api::types::string::RecordKey;
 use indexed_db_futures::cursor::CursorDirection;
 use indexed_db_futures::database::Database;
