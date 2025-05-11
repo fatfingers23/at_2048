@@ -1,9 +1,12 @@
 use crate::at_repo_sync::AtRepoSyncError;
 use crate::idb::{DB_NAME, GAME_STORE, RecordStorageWrapper, paginated_cursor};
+use crate::pages::game::{Grid, Tile, TileProps};
+use crate::pages::seed::_SeedProps::starting_seed;
 use crate::store::UserStore;
 use atrium_api::types::string::{Datetime, Did};
 use indexed_db_futures::database::Database;
 use std::rc::Rc;
+use twothousand_forty_eight::unified::game::GameState;
 use twothousand_forty_eight::unified::validation::{Validatable, ValidationResult};
 use twothousand_forty_eight::v2::io::SeededRecordingParseError;
 use twothousand_forty_eight::v2::recording::SeededRecording;
@@ -11,10 +14,11 @@ use twothousand_forty_eight::v2::replay::MoveReplayError;
 use types_2048::blue::_2048::defs::SyncStatusData;
 use types_2048::blue::_2048::game;
 use types_2048::blue::_2048::game::RecordData;
-use wasm_bindgen::JsCast;
+use wasm_bindgen::{JsCast, JsValue};
 use web_sys::HtmlElement;
 use yew::platform::spawn_local;
 use yew::prelude::*;
+use yew::props;
 use yew_hooks::{use_async, use_async_with_options, use_effect_once, use_mount};
 use yewdux::context_provider::Props;
 use yewdux::use_store;
@@ -97,6 +101,72 @@ fn tab_component(props: &HistoryTabProps) -> Html {
     }
 }
 
+#[function_component(MiniTile)]
+fn mini_tile(props: &TileProps) -> Html {
+    let TileProps {
+        tile_value: tile_value_ref,
+        new_tile: new_tile_ref,
+        x,
+        y,
+        size,
+    } = props;
+
+    let text = if *tile_value_ref == 0 {
+        String::new()
+    } else {
+        tile_value_ref.to_string()
+    };
+
+    //TODO fix font size for big numbers
+    let tile_class = crate::pages::game::get_bg_color_and_text_color(*tile_value_ref);
+    html! {
+        <div
+            class="  p-1 flex items-center justify-center"
+        >
+            <div
+                class={format!(
+                        "flex items-center justify-center w-full h-full {} font-bold text rounded-md",
+                        tile_class
+                    )}
+            >
+                { text }
+            </div>
+        </div>
+    }
+}
+
+#[derive(Properties, Clone, PartialEq)]
+struct MiniGameboardProps {
+    recording: SeededRecording,
+}
+
+#[function_component(MiniGameboard)]
+fn mini_gameboard(props: &MiniGameboardProps) -> Html {
+    let gamestate = GameState::from_reconstructable_ruleset(&props.recording).unwrap();
+    let flatten_tiles = gamestate
+        .board
+        .tiles
+        .iter()
+        .flatten()
+        .filter_map(|tile| *tile)
+        .collect::<Vec<_>>();
+    html! {
+                    <div
+
+                id="game-board"
+                class="flex-1 mx-auto w-full bg-light-board-background shadow-2xl rounded-md p-1"
+            >
+                    <div class={classes!(String::from("grid grid-cols-4 p-2 w-full h-full"))}>
+                        { flatten_tiles.into_iter().map(|tile| {
+
+                                html! { <MiniTile key={tile.id} tile_value={tile.value} new_tile={tile.new} x={tile.x} y={tile.y} size={4} /> }
+                            }).collect::<Html>() }
+                    </div>
+
+            </div>
+    }
+}
+
 #[derive(Properties, Clone, PartialEq)]
 struct GameTileProps {
     game: Rc<game::RecordData>,
@@ -104,34 +174,78 @@ struct GameTileProps {
 
 #[function_component(GameTile)]
 fn game_tile(props: &GameTileProps) -> Html {
-    // <div class="bg-base-200 p-4 rounded-lg shadow">
-    //     // <h3>{format!("Game {}", game)}</h3>
-    //     <p>{format!("Score: {}", game.current_score)}</p>
-    //     // <p>{format!("Date: {}", chrono::NaiveDateTime::from_timestamp_opt(game.timestamp, 0).unwrap().format("%Y-%m-%d"))}</p>
-    //     </div>
-    let game_history: Option<ValidationResult> =
-        match props.game.seeded_recording.parse::<SeededRecording>() {
-            Ok(history) => match history.validate() {
-                Ok(history) => Some(history),
-                Err(err) => {
-                    log::error!("{:?}", err);
-                    None
-                }
-            },
-            Err(err) => {
-                log::error!("{:?}", err);
-                None
-            }
-        };
+    //Validation results
+    //Score
+    //valid or no
 
-    html! {
-        <div class="bg-base-100 shadow-lg rounded-lg md:p-6 p-1">
-            <div class="w-full max-w-2xl mx-auto">
-                <h3>{ "Game 1" }</h3>
-                <p>{ format!("Score: {}", props.game.current_score) }</p>
-                <p>{ format!("Date: {}", props.game.created_at.as_str()) }</p>
+    //Seed recording
+    //Seed
+
+    //From prop
+    //date
+    //won
+    //sync status
+
+    let game = props.game.clone();
+    let seeded_recording = use_state(|| None);
+    let validation_result: UseStateHandle<Option<ValidationResult>> = use_state(|| None);
+
+    use_effect_with(seeded_recording.clone(), move |seeded_recording| match game
+        .seeded_recording
+        .parse::<SeededRecording>(
+    ) {
+        Ok(results) => seeded_recording.set(Some(results)),
+        Err(err) => {
+            log::error!("{:?}", err);
+        }
+    });
+
+    let validation_clone = validation_result.clone();
+    use_effect_with(
+        seeded_recording.clone(),
+        move |seeded_recording| match seeded_recording.as_ref() {
+            Some(seeded_recording) => match seeded_recording.validate() {
+                Ok(result) => validation_clone.set(Some(result)),
+                Err(_) => {}
+            },
+            None => {}
+        },
+    );
+
+    // let formatted_game_date = js_sys::Date::new(&JsValue::from_str(props.game.created_at.as_str()));
+    let formated_date = props.game.created_at.as_ref().format("%m/%d/%Y %H:%M");
+    match validation_result.as_ref() {
+        Some(validation_result) => {
+            html! {
+                <div class="bg-base-100 shadow-lg rounded-lg md:p-6 p-1 flex flex-row">
+                    <MiniGameboard recording={seeded_recording.as_ref().unwrap().clone()} />
+                    <div class="pl-1 w-3/4 mx-auto">
+                        <p>{ format!("Score: {}", validation_result.score) }</p>
+                        <p>
+                            { match seeded_recording.as_ref() {
+                                Some(recording) => format!("Seed: {}", recording.seed),
+                                None => String::from("Loading seed..")
+                            } }
+                        </p>
+                        <p>
+                { match seeded_recording.as_ref() {
+                    Some(recording) => recording.moves.len().to_string(),
+                    None => "".to_string()
+                }}
+                        </p>
+                        <p>{ format!("Date: {}", formated_date) }</p>
+                        // <p>{ format!("Moves: {}", history.moves.len()) }</p>
+                    </div>
+                </div>
+            }
+        }
+        None => html! {
+            <div class="bg-base-100 shadow-lg rounded-lg md:p-6 p-1">
+                <div class="w-full max-w-2xl mx-auto">
+                    <span>{ "there was an issue validating this game." }</span>
+                </div>
             </div>
-        </div>
+        },
     }
 }
 
@@ -195,7 +309,15 @@ pub fn history() -> Html {
             let display_games = display_games.clone();
             match tab_state {
                 //TODO do async stuff in here with spawn locla and set outside state?
-                TabState::Local => spawn_local(async move {}),
+                TabState::Local => spawn_local(async move {
+                    match get_local_games().await {
+                        Ok(games) => &display_games.set(games),
+                        Err(err) => {
+                            log::error!("{:?}", err);
+                            &()
+                        }
+                    };
+                }),
                 TabState::Remote => {}
                 TabState::Both => {}
             }
@@ -209,7 +331,7 @@ pub fn history() -> Html {
                 <div class="bg-base-100 shadow-lg rounded-lg md:p-6 p-1">
                     <div class="w-full max-w-2xl mx-auto">
                         <HistoryTab action={tab_click_callback} />
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="grid grid-cols-1  gap-6">
                             { (*display_games_for_mount).iter().enumerate().map(|(i, game)| {
                                 html! {
                                     <GameTile key={i} game={game} />

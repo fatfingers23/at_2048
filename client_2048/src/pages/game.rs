@@ -253,7 +253,7 @@ impl State {
     }
 }
 
-fn get_position_class(row_start: usize, col_start: usize, size: usize) -> String {
+pub(crate) fn get_position_class(row_start: usize, col_start: usize, size: usize) -> String {
     //Have to do this or tailwindcss does not pick up and send the css it seems
     let row_class = match row_start {
         0 => "top-0",
@@ -300,7 +300,7 @@ fn get_position_class(row_start: usize, col_start: usize, size: usize) -> String
     temp.to_string()
 }
 
-fn get_bg_color_and_text_color<'a>(tile_size: usize) -> &'a str {
+pub(crate) fn get_bg_color_and_text_color<'a>(tile_size: usize) -> &'a str {
     match tile_size {
         0 => "bg-light-grid-cell-0",
         2 => "bg-light-grid-cell-2 text-light-grid-cell-text-2",
@@ -815,7 +815,7 @@ pub fn board(game_props: &GameProps) -> Html {
                 class="flex-1 mx-auto md:p-4 p-4 w-90 md:w-3/4 lg:w-1/2 xl:w-140 bg-light-board-background shadow-2xl rounded-md md:mt-4 xs:mt-1 mt-2"
             >
                 <div class="aspect-square p-2 flex flex-col rounded-md w-full  relative ">
-                    <div className="flex flex-col p-2 relative w-full h-full">
+                    <div class="flex flex-col p-2 relative w-full h-full">
                         //Place holder grids
                         { (0..total_tiles).map(|i| {
                                 html! { <Grid key={format!("grid-parent-{}", i)} position={i} size={width} /> }
