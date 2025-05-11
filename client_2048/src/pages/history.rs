@@ -1,3 +1,4 @@
+use crate::Route;
 use crate::at_repo_sync::AtRepoSyncError;
 use crate::idb::{DB_NAME, GAME_STORE, RecordStorageWrapper, paginated_cursor};
 use crate::pages::game::{Grid, Tile, TileProps};
@@ -20,6 +21,7 @@ use yew::platform::spawn_local;
 use yew::prelude::*;
 use yew::props;
 use yew_hooks::{use_async, use_async_with_options, use_effect_once, use_mount};
+use yew_router::prelude::Link;
 use yewdux::context_provider::Props;
 use yewdux::use_store;
 
@@ -120,9 +122,7 @@ fn mini_tile(props: &TileProps) -> Html {
     //TODO fix font size for big numbers
     let tile_class = crate::pages::game::get_bg_color_and_text_color(*tile_value_ref);
     html! {
-        <div
-            class="  p-1 flex items-center justify-center"
-        >
+        <div class="  p-1 flex items-center justify-center">
             <div
                 class={format!(
                         "flex items-center justify-center w-full h-full {} font-bold text rounded-md",
@@ -151,19 +151,16 @@ fn mini_gameboard(props: &MiniGameboardProps) -> Html {
         .filter_map(|tile| *tile)
         .collect::<Vec<_>>();
     html! {
-                    <div
-
-                id="game-board"
-                class="flex-1 mx-auto w-full bg-light-board-background shadow-2xl rounded-md p-1"
-            >
-                    <div class={classes!(String::from("grid grid-cols-4 p-2 w-full h-full"))}>
-                        { flatten_tiles.into_iter().map(|tile| {
+        <div
+            class="w-1/4 flex-1 mx-auto w-full bg-light-board-background shadow-2xl rounded-md p-1"
+        >
+            <div class={classes!(String::from("grid grid-cols-4 p-1 md:p-2 w-full h-full"))}>
+                { flatten_tiles.into_iter().map(|tile| {
 
                                 html! { <MiniTile key={tile.id} tile_value={tile.value} new_tile={tile.new} x={tile.x} y={tile.y} size={4} /> }
                             }).collect::<Html>() }
-                    </div>
-
             </div>
+        </div>
     }
 }
 
@@ -218,22 +215,30 @@ fn game_tile(props: &GameTileProps) -> Html {
         Some(validation_result) => {
             html! {
                 <div class="bg-base-100 shadow-lg rounded-lg md:p-6 p-1 flex flex-row">
-                    <MiniGameboard recording={seeded_recording.as_ref().unwrap().clone()} />
-                    <div class="pl-1 w-3/4 mx-auto">
-                        <p>{ format!("Score: {}", validation_result.score) }</p>
+                    <div class="flex flex-col">
+                        <span class="text-md">
+                            { format!("Score: {}", validation_result.score) }
+                        </span>
+                        <MiniGameboard recording={seeded_recording.as_ref().unwrap().clone()} />
+                        <span>
+                            { match seeded_recording.as_ref() {
+                                Some(recording) => {
+                                    // format!("Seed: {}", recording.seed)
+                                    html!{<Link<Route> classes="cursor-pointer underline text-blue-600 visited:text-purple-600" to={Route::SeedPage { seed: recording.seed }}>{ format!("Seed: {}", recording.seed) }</Link<Route>>}
+
+                                },
+                                None => html!{ <p> {"Loading seed.."} </p> }
+                            } }
+                        </span>
+                    </div>
+                    <div class="pl-1 md:w-3/4 w-1/2 mx-auto">
                         <p>
                             { match seeded_recording.as_ref() {
-                                Some(recording) => format!("Seed: {}", recording.seed),
-                                None => String::from("Loading seed..")
+                                Some(recording) => format!("Moves: {}", recording.moves.len().to_string()),
+                                None => String::from("Loading moves..")
                             } }
                         </p>
-                        <p>
-                { match seeded_recording.as_ref() {
-                    Some(recording) => recording.moves.len().to_string(),
-                    None => "".to_string()
-                }}
-                        </p>
-                        <p>{ format!("Date: {}", formated_date) }</p>
+                        <p class="text-sm">{  formated_date.to_string() }</p>
                         // <p>{ format!("Moves: {}", history.moves.len()) }</p>
                     </div>
                 </div>
