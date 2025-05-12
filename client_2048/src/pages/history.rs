@@ -1,18 +1,14 @@
+use crate::Route;
 use crate::agent::{StorageRequest, StorageResponse, StorageTask};
-use crate::at_repo_sync::{AtRepoSync, AtRepoSyncError};
+use crate::at_repo_sync::AtRepoSyncError;
 use crate::idb::{DB_NAME, GAME_STORE, RecordStorageWrapper, paginated_cursor};
 use crate::pages::game::TileProps;
 use crate::store::UserStore;
-use crate::{Route, check_drawer_open};
 use StorageResponse::RepoError;
-use atrium_api::agent::Agent;
 use atrium_api::types::string::Did;
 use gloo::dialogs::{alert, confirm};
-use gloo_utils::document;
 use indexed_db_futures::database::Database;
-use log::info;
 use std::rc::Rc;
-use std::sync::Arc;
 use twothousand_forty_eight::unified::game::GameState;
 use twothousand_forty_eight::unified::validation::{Validatable, ValidationResult};
 use twothousand_forty_eight::v2::recording::SeededRecording;
@@ -22,7 +18,7 @@ use web_sys::HtmlElement;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 use yew_agent::oneshot::use_oneshot_runner;
-use yew_hooks::{UseAsyncHandle, use_async, use_effect_once};
+use yew_hooks::use_effect_once;
 use yew_router::hooks::use_navigator;
 use yew_router::prelude::Link;
 use yewdux::use_store;
@@ -124,7 +120,7 @@ fn mini_tile(props: &TileProps) -> Html {
         <div class="  p-1 flex items-center justify-center">
             <div
                 class={format!(
-                        "flex items-center justify-center w-full h-full {} font-bold text rounded-md",
+                        "flex items-center justify-center w-8 h-full {} font-bold text rounded-md",
                         tile_class
                     )}
             >
@@ -155,9 +151,8 @@ fn mini_gameboard(props: &MiniGameboardProps) -> Html {
         >
             <div class={classes!(String::from("grid grid-cols-4 p-1 md:p-2 w-full h-full"))}>
                 { flatten_tiles.into_iter().map(|tile| {
-
-                                html! { <MiniTile key={tile.id} tile_value={tile.value} new_tile={tile.new} x={tile.x} y={tile.y} size={4} /> }
-                            }).collect::<Html>() }
+                     html! { <MiniTile key={tile.id} tile_value={tile.value} new_tile={tile.new} x={tile.x} y={tile.y} size={4} /> }
+                }).collect::<Html>() }
             </div>
         </div>
     }
@@ -165,21 +160,23 @@ fn mini_gameboard(props: &MiniGameboardProps) -> Html {
 
 #[derive(Properties, Clone, PartialEq)]
 struct GameTileProps {
-    game: Rc<game::RecordData>,
+    game: Rc<RecordStorageWrapper<game::RecordData>>,
     did: Option<Did>,
+    reload_action: Callback<()>,
 }
 
 #[function_component(GameTile)]
 fn game_tile(props: &GameTileProps) -> Html {
-    let game = props.game.clone();
+    let record_key = props.game.rkey.clone();
+    let game = props.game.record.clone();
     let seeded_recording = use_state(|| None);
     let validation_result: UseStateHandle<Option<ValidationResult>> = use_state(|| None);
-    let storage_action_not_running = use_state(|| true);
+    let resync_loading = use_state(|| false);
+    let sync_error = use_state(|| None);
     let navigator = use_navigator().unwrap();
 
     let storage_task = use_oneshot_runner::<StorageTask>();
     let storage_agent = storage_task.clone();
-    let storage_agent_for_click = storage_agent.clone();
 
     use_effect_with(seeded_recording.clone(), move |seeded_recording| match game
         .seeded_recording
@@ -203,15 +200,21 @@ fn game_tile(props: &GameTileProps) -> Html {
         },
     );
 
-    let seeded_recording_clone = props.game.seeded_recording.clone();
     let storage_agent_for_click = storage_agent.clone(); // Clone it before use
     let did = props.did.clone();
-
+    let resync_loading_clone = resync_loading.clone();
+    let sync_error_clone = sync_error.clone();
+    let cloned_reload_action = props.reload_action.clone();
     let sync_onclick = Callback::from(move |_: MouseEvent| {
         let did = did.clone();
-        let request = StorageRequest::GameCompleted(seeded_recording_clone.clone(), did.clone());
+        let sync_error_clone = sync_error_clone.clone();
+        let request = StorageRequest::TryToSyncRemotely(record_key.clone(), did.clone());
         let storage_agent_for_click = storage_agent_for_click.clone(); // Clone it before use
         let navigator = navigator.clone();
+        let cloned_reload_action = cloned_reload_action.clone();
+
+        resync_loading_clone.set(true);
+        let resync_loading_clone_for_closure = resync_loading_clone.clone();
         spawn_local(async move {
             let result = storage_agent_for_click.run(request).await;
             match result {
@@ -239,16 +242,28 @@ fn game_tile(props: &GameTileProps) -> Html {
                                 }
                             }
                         }
+                        AtRepoSyncError::Error(err) => {
+                            sync_error_clone.set(Some(err));
+                        }
                         _ => {}
                     }
                 }
+                StorageResponse::Success => {
+                    cloned_reload_action.emit(());
+                }
                 _ => {}
             };
+            resync_loading_clone_for_closure.set(false);
         });
     });
 
     // let formatted_game_date = js_sys::Date::new(&JsValue::from_str(props.game.created_at.as_str()));
-    let formated_date = props.game.created_at.as_ref().format("%m/%d/%Y %H:%M");
+    let formated_date = props
+        .game
+        .record
+        .created_at
+        .as_ref()
+        .format("%m/%d/%Y %H:%M");
     match validation_result.as_ref() {
         Some(validation_result) => {
             html! {
@@ -260,24 +275,24 @@ fn game_tile(props: &GameTileProps) -> Html {
                         <MiniGameboard recording={seeded_recording.as_ref().unwrap().clone()} />
                         <span>
                             { match seeded_recording.as_ref() {
-                                    Some(recording) => {
-                                        html!{<Link<Route> classes="cursor-pointer underline text-blue-600 visited:text-purple-600" to={Route::SeedPage { seed: recording.seed }}>{ format!("Seed: {}", recording.seed) }</Link<Route>>}
-                                    },
-                                    None => html!{ <p> {"Loading seed.."} </p> }
-                            } }
+                                                Some(recording) => {
+                                                    html!{<Link<Route> classes="cursor-pointer underline text-blue-600 visited:text-purple-600" to={Route::SeedPage { seed: recording.seed }}>{ format!("Seed: {}", recording.seed) }</Link<Route>>}
+                                                },
+                                                None => html!{ <p> {"Loading seed.."} </p> }
+                                        } }
                         </span>
                     </div>
                     <div class="pl-2 md:w-3/4 w-1/2 mx-auto">
                         <p>
                             { match seeded_recording.as_ref() {
-                                            Some(recording) => format!("Moves: {}", recording.moves.len().to_string()),
-                                            None => String::from("Loading moves..")
-                                        } }
+                                                        Some(recording) => format!("Moves: {}", recording.moves.len().to_string()),
+                                                        None => String::from("Loading moves..")
+                                                    } }
                         </p>
                         <p>{ formated_date.to_string() }</p>
                         <div class="pt-2">
-                            if let Some(did) = props.did.clone() {
-                                if props.game.sync_status.synced_with_at_repo {
+                            if let Some(_) = props.did.clone() {
+                                if props.game.record.sync_status.synced_with_at_repo {
                                     <div class="badge badge-success">
                                         <svg
                                             class="size-[1em]"
@@ -312,21 +327,31 @@ fn game_tile(props: &GameTileProps) -> Html {
                                         { "Synced" }
                                     </div>
                                 } else {
-                                    <button onclick={sync_onclick} class="btn btn-outline">
-                                        <svg
-                                            class="inline-block w-8 fill-[#0a7aff]"
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            viewBox="0 0 640 512"
-                                        >
-                                            <path
-                                                d="M144 480C64.5 480 0 415.5 0 336c0-62.8 40.2-116.2 96.2-135.9c-.1-2.7-.2-5.4-.2-8.1c0-88.4 71.6-160 160-160c59.3 0 111 32.2 138.7 80.2C409.9 102 428.3 96 448 96c53 0 96 43 96 96c0 12.2-2.3 23.8-6.4 34.6C596 238.4 640 290.1 640 352c0 70.7-57.3 128-128 128l-368 0zm79-217c-9.4 9.4-9.4 24.6 0 33.9s24.6 9.4 33.9 0l39-39L296 392c0 13.3 10.7 24 24 24s24-10.7 24-24l0-134.1 39 39c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-80-80c-9.4-9.4-24.6-9.4-33.9 0l-80 80z"
-                                            />
-                                        </svg>
-                                        { "Sync" }
-                                    </button>
+                                    if *resync_loading {
+                                        <button class="btn btn-outline" disabled=true>
+                                            <span class="loading loading-spinner" />
+                                            { "loading" }
+                                        </button>
+                                    } else {
+                                        <button onclick={sync_onclick} class="btn btn-outline">
+                                            <svg
+                                                class="inline-block w-5 fill-[#0a7aff]"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                viewBox="0 0 640 512"
+                                            >
+                                                <path
+                                                    d="M144 480C64.5 480 0 415.5 0 336c0-62.8 40.2-116.2 96.2-135.9c-.1-2.7-.2-5.4-.2-8.1c0-88.4 71.6-160 160-160c59.3 0 111 32.2 138.7 80.2C409.9 102 428.3 96 448 96c53 0 96 43 96 96c0 12.2-2.3 23.8-6.4 34.6C596 238.4 640 290.1 640 352c0 70.7-57.3 128-128 128l-368 0zm79-217c-9.4 9.4-9.4 24.6 0 33.9s24.6 9.4 33.9 0l39-39L296 392c0 13.3 10.7 24 24 24s24-10.7 24-24l0-134.1 39 39c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-80-80c-9.4-9.4-24.6-9.4-33.9 0l-80 80z"
+                                                />
+                                            </svg>
+                                            { "Sync" }
+                                        </button>
+                                    }
                                 }
                             }
                         </div>
+                        if let Some(err) = sync_error.as_ref() {
+                            <span class="text-red-500">{err}</span>
+                        }
                     </div>
                 </div>
             }
@@ -341,19 +366,20 @@ fn game_tile(props: &GameTileProps) -> Html {
     }
 }
 
-async fn get_local_games() -> Result<Rc<Vec<Rc<game::RecordData>>>, AtRepoSyncError> {
+async fn get_local_games()
+-> Result<Rc<Vec<Rc<RecordStorageWrapper<game::RecordData>>>>, AtRepoSyncError> {
     log::info!("Getting local games");
     let db = Database::open(DB_NAME)
         .await
-        .map_err(|e| AtRepoSyncError::Error(e.to_string()))
-        .unwrap();
+        .map_err(|e| AtRepoSyncError::Error(e.to_string()))?;
+
     let local_games: Vec<RecordStorageWrapper<game::RecordData>> =
         paginated_cursor(db, GAME_STORE, 10, 0).await.unwrap();
     Ok(Rc::new(
         local_games
-            .into_iter()
-            .map(|wrapper| Rc::new(wrapper.record))
-            .collect(),
+            .iter()
+            .map(|game| Rc::new(game.clone()))
+            .collect::<Vec<_>>(),
     ))
 }
 
@@ -363,18 +389,6 @@ pub fn history() -> Html {
     let (user_store, _) = use_store::<UserStore>();
 
     let display_games = use_state(|| Rc::new(vec![]));
-
-    // let at_repo_sync: UseAsyncHandle<_, E> = use_async(async move {
-    //     match &user_store.did {
-    //         Some(did) => {
-    //             let oauth_client = crate::oauth_client::oauth_client();
-    //             let session = oauth_client.restore(&did).await?;
-    //             let agent = Agent::new(session);
-    //             Ok(Arc::new(AtRepoSync::new_logged_in_repo(agent, did.clone())))
-    //         }
-    //         None => Ok(Arc::new(AtRepoSync::new_local_repo())),
-    //     }
-    // });
 
     let display_games_for_mount = display_games.clone();
     use_effect_once(move || {
@@ -411,7 +425,21 @@ pub fn history() -> Html {
             }
         })
     };
-    // let local_games = use_async(async move {});
+
+    let games_reload_callback_clone = display_games_for_mount.clone();
+    let reload_callback = Callback::from(move |_| {
+        let display_games = games_reload_callback_clone.clone();
+        spawn_local(async move {
+            match get_local_games().await {
+                Ok(games) => &display_games.set(games),
+                Err(err) => {
+                    log::error!("{:?}", err);
+                    &()
+                }
+            };
+        })
+    });
+
     html! {
         <div class="md:p-4 p-1">
             <div class="max-w-4xl mx-auto space-y-6 justify-center">
@@ -419,10 +447,16 @@ pub fn history() -> Html {
                 <div class="bg-base-100 shadow-lg rounded-lg md:p-6 p-1">
                     <div class="w-full max-w-2xl mx-auto">
                         <HistoryTab action={tab_click_callback} />
-                        <div class="grid grid-cols-1  gap-6">
+                        <div class="grid grid-cols-1 gap-6">
+                            if display_games_for_mount.as_ref().len() == 0 {
+                                <div class="flex items-center justify-center">
+                                    <span class="loading loading-spinner loading-lg" />
+                                    <h1 class="ml-4 text-3xl font-bold">{ "Loading..." }</h1>
+                                </div>
+                            }
                             { (*display_games_for_mount).iter().enumerate().map(|(i, game)| {
                                 html! {
-                                    <GameTile key={i} game={game} did={user_store.did.clone()} />
+                                    <GameTile key={i} game={game} did={user_store.did.clone()} reload_action={reload_callback.clone()} />
                                 }
                             }).collect::<Html>() }
                         </div>

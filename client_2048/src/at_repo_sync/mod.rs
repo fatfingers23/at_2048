@@ -6,7 +6,7 @@ use crate::idb::{
 use crate::resolver::ApiDNSTxtResolver;
 use atrium_api::agent::Agent;
 use atrium_api::types::Collection;
-use atrium_api::types::string::{AtIdentifier, Datetime, Did, RecordKey, Tid};
+use atrium_api::types::string::{AtIdentifier, Datetime, Did, RecordKey};
 use atrium_identity::did::CommonDidResolver;
 use atrium_identity::handle::AtprotoHandleResolver;
 use atrium_oauth::{DefaultHttpClient, OAuthSession};
@@ -557,10 +557,9 @@ impl AtRepoSync
     pub async fn create_a_new_game(
         &self,
         mut new_game: blue::_2048::game::RecordData,
-        key: Tid,
+        record_key: RecordKey,
         game_hash: String,
     ) -> Result<(), AtRepoSyncError> {
-        let record_key: RecordKey = key.parse().unwrap();
         let string_data = serde_json::to_string(&new_game).unwrap();
         let hash = const_xxh3(string_data.as_bytes());
         new_game.sync_status.hash = format!("{:x}", hash);
@@ -599,6 +598,9 @@ impl AtRepoSync
                                 return Err(AtRepoSyncError::AuthErrorNeedToReLogin);
                             }
                             _ => {
+                                return Err(AtRepoSyncError::Error(String::from(
+                                    "Error saving the game remotely",
+                                )));
                                 //Just going to log errors "quietly" as I figure out how to handle them
                             }
                         }
