@@ -12,7 +12,6 @@ use std::rc::Rc;
 use twothousand_forty_eight::unified::game::GameState;
 use twothousand_forty_eight::unified::validation::{Validatable, ValidationResult};
 use twothousand_forty_eight::v2::recording::SeededRecording;
-use twothousand_forty_eight::wasm::new_game;
 use types_2048::blue::_2048::game;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlElement;
@@ -426,7 +425,8 @@ pub fn history() -> Html {
     log::info!("History Page rendered");
     let (user_store, _) = use_store::<UserStore>();
     let pagination = use_state(|| PaginationOptions::default());
-    let display_games = use_state(|| Rc::new(vec![]));
+    // let display_games = use_state(|| Rc::new(vec![]));
+    let display_games = use_state(|| None);
     let current_tab_state = use_state(|| Rc::new(TabState::Local));
 
     let display_games_for_mount = display_games.clone();
@@ -436,7 +436,7 @@ pub fn history() -> Html {
         spawn_local(async move {
             //Can default pagination since this is on load
             match get_local_games(PaginationOptions::default()).await {
-                Ok(games) => &display_games_effect.set(games),
+                Ok(games) => &display_games_effect.set(Some(games)),
                 Err(err) => {
                     log::error!("{:?}", err);
                     &()
@@ -456,7 +456,7 @@ pub fn history() -> Html {
             spawn_local(async move {
                 //Just defaulting pagination on tab change
                 match get_games(&tab_state, PaginationOptions::default()).await {
-                    Ok(games) => &display_games.set(games),
+                    Ok(games) => &display_games.set(Some(games)),
                     Err(err) => {
                         log::error!("{:?}", err);
                         &()
@@ -483,9 +483,12 @@ pub fn history() -> Html {
             spawn_local(async move {
                 match get_games(current_tab_state.as_ref(), new_pagination.clone()).await {
                     Ok(games) => {
-                        let mut combined = (*display_games).to_vec();
-                        combined.extend((*games).iter().cloned());
-                        display_games.set(Rc::new(combined));
+                        let mut combined = match &*display_games {
+                            Some(games) => games.as_ref().to_vec(),
+                            None => vec![],
+                        };
+                        combined.extend(games.to_vec());
+                        display_games.set(Some(Rc::new(combined)));
                         new_pagination.fully_loaded = games.len() < new_pagination.count as usize;
                         pagination.set(new_pagination);
                     }
@@ -506,10 +509,9 @@ pub fn history() -> Html {
         let current_tab_state = current_tab_state_clone.clone();
         spawn_local(async move {
             match get_games(current_tab_state.as_ref(), (*pagination).clone()).await {
-                Ok(games) => &display_games.set(games),
+                Ok(games) => display_games.set(Some(games)),
                 Err(err) => {
                     log::error!("{:?}", err);
-                    &()
                 }
             };
         })
@@ -523,24 +525,39 @@ pub fn history() -> Html {
                     <div class="w-full max-w-2xl mx-auto">
                         <HistoryTab action={tab_click_callback} />
                         <div class="grid grid-cols-1 gap-6">
-                            if display_games_for_mount.as_ref().len() == 0 {
+                            if display_games_for_mount.is_none() {
                                 <div class="flex items-center justify-center">
                                     <span class="loading loading-spinner loading-lg" />
                                     <h1 class="ml-4 text-3xl font-bold">{ "Loading..." }</h1>
                                 </div>
                             } else {
-                                { (*display_games_for_mount).iter().enumerate().map(|(i, game)| {
-                                    html! {
-                                        <GameTile key={i} game={game} did={user_store.did.clone()} reload_action={reload_callback.clone()} />
+                                { display_games_for_mount.as_ref().map(|games| {
+                                    (**games).iter().enumerate().map(|(i, game)| {
+                                        html! {
+                                            <GameTile key={i} game={game.clone()} did={user_store.did.clone()} reload_action={reload_callback.clone()} />
+                                        }
+                                    }).collect::<Html>()
+                                }).unwrap_or_default() }
+                                if let Some(games) = display_games.as_ref() {
+                                    if games.len() == 0 {
+                                        <div class="flex items-center justify-center">
+                                            <h1 class="ml-4 text-3xl font-bold">
+                                                { "You have no local games." }
+                                            </h1>
+                                        </div>
+                                    } else {
+                                        //TODO figure this logic out
+                                        if !(*pagination).fully_loaded {
+                                            <div class="flex w-full justify-center">
+                                                <button
+                                                    onclick={load_more_callback}
+                                                    class="btn btn-outline btn-wide"
+                                                >
+                                                    { "Load more" }
+                                                </button>
+                                            </div>
+                                        }
                                     }
-                                }).collect::<Html>() }
-                                //TODO figure this logic out
-                                if !(*pagination).fully_loaded {
-                                    <div class="flex w-full justify-center">
-                                        <button onclick={load_more_callback} class="btn btn-outline btn-wide">
-                                            { "Load more" }
-                                        </button>
-                                    </div>
                                 }
                             }
                         </div>

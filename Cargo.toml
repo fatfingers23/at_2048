@@ -1,9 +1,5 @@
 [workspace]
-members = ["admin_2048",
-    "appview_2048",
-    "client_2048",
-    "types_2048",
-]
+members = ["admin_2048", "appview_2048", "client_2048", "types_2048"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -13,6 +9,9 @@ atrium-identity = "0.1.4"
 atrium-oauth = "0.1.2"
 atrium-xrpc = "0.12.3"
 atrium-xrpc-client = "0.5.14"
-twothousand-forty-eight = { version = "0.22.1", features = ["wasm", "wasm-bindgen"] }
+twothousand-forty-eight = { version = "0.22.1", features = [
+    "wasm",
+    "wasm-bindgen",
+] }
 serde = { version = "1.0.219", features = ["derive"] }
 tokio = { version = "1.44.1", features = ["full"] }
