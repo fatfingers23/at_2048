@@ -263,10 +263,8 @@ where
         match cursor.next_record_ser::<T>().await {
             Ok(result) => {
                 if let Some(item) = result {
-                    log::debug!("Got item: {:?}", 1);
                     result_items.push(item);
                 }
-                log::debug!("Got item: {:?}", 2);
             }
             Err(err) => {
                 log::error!("Error getting next record: {}", err);

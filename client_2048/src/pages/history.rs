@@ -372,6 +372,8 @@ struct PaginationOptions {
     count: u32,
     skip: u32,
     at_proto_cursor: Option<String>,
+    /// Set to true once there is no more games to load
+    fully_loaded: bool,
 }
 
 impl Default for PaginationOptions {
@@ -380,6 +382,7 @@ impl Default for PaginationOptions {
             count: 2,
             skip: 0,
             at_proto_cursor: None,
+            fully_loaded: false,
         }
     }
 }
@@ -448,10 +451,11 @@ pub fn history() -> Html {
         let display_games = display_games_for_mount.clone();
         let pagination_clone = pagination_clone.clone();
         Callback::from(move |tab_state: TabState| {
+            pagination_clone.set(PaginationOptions::default());
             let display_games = display_games.clone();
-            let pagination = pagination_clone.clone();
             spawn_local(async move {
-                match get_games(&tab_state, (*pagination).clone()).await {
+                //Just defaulting pagination on tab change
+                match get_games(&tab_state, PaginationOptions::default()).await {
                     Ok(games) => &display_games.set(games),
                     Err(err) => {
                         log::error!("{:?}", err);
@@ -482,6 +486,7 @@ pub fn history() -> Html {
                         let mut combined = (*display_games).to_vec();
                         combined.extend((*games).iter().cloned());
                         display_games.set(Rc::new(combined));
+                        new_pagination.fully_loaded = games.len() < new_pagination.count as usize;
                         pagination.set(new_pagination);
                     }
                     Err(err) => {
@@ -530,13 +535,13 @@ pub fn history() -> Html {
                                     }
                                 }).collect::<Html>() }
                                 //TODO figure this logic out
-                                // if (*pagination).count >= (*display_games_for_mount).len() as u32 {
+                                if !(*pagination).fully_loaded {
                                     <div class="flex w-full justify-center">
                                         <button onclick={load_more_callback} class="btn btn-outline btn-wide">
                                             { "Load more" }
                                         </button>
                                     </div>
-                                // }
+                                }
                             }
                         </div>
                     </div>
