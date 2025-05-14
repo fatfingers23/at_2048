@@ -276,7 +276,7 @@ fn game_tile(props: &GameTileProps) -> Html {
                         <span>
                             { match seeded_recording.as_ref() {
                                                 Some(recording) => {
-                                                    html!{<Link<Route> classes="cursor-pointer underline text-blue-600 visited:text-purple-600" to={Route::SeedPage { seed: recording.seed }}>{ format!("Seed: {}", recording.seed) }</Link<Route>>}
+                                                    html!{<Link<Route> classes="cursor-pointer underline text-primary-content visited:text-purple-600" to={Route::SeedPage { seed: recording.seed }}>{ format!("Seed: {}", recording.seed) }</Link<Route>>}
                                                 },
                                                 None => html!{ <p> {"Loading seed.."} </p> }
                                         } }
@@ -431,12 +431,24 @@ pub fn history() -> Html {
 
     let display_games_for_mount = display_games.clone();
     let display_games_effect = display_games.clone();
+    let pagination_clone = pagination.clone();
+    let use_effect_pagination = pagination.clone();
     use_effect_once(move || {
         log::info!("Mounted");
         spawn_local(async move {
             //Can default pagination since this is on load
             match get_local_games(PaginationOptions::default()).await {
-                Ok(games) => &display_games_effect.set(Some(games)),
+                Ok(games) => {
+                    if games.len() < use_effect_pagination.count as usize {
+                        use_effect_pagination.set(PaginationOptions {
+                            count: use_effect_pagination.count,
+                            skip: 0,
+                            at_proto_cursor: None,
+                            fully_loaded: true,
+                        });
+                    }
+                    &display_games_effect.set(Some(games))
+                }
                 Err(err) => {
                     log::error!("{:?}", err);
                     &()
@@ -446,7 +458,7 @@ pub fn history() -> Html {
         || ()
     });
 
-    let pagination_clone = pagination.clone();
+    let pagination_clone = pagination_clone.clone();
     let tab_click_callback = {
         let display_games = display_games_for_mount.clone();
         let pagination_clone = pagination_clone.clone();
@@ -526,11 +538,13 @@ pub fn history() -> Html {
                         <HistoryTab action={tab_click_callback} />
                         <div class="grid grid-cols-1 gap-6">
                             if display_games_for_mount.is_none() {
+                                //If the games have not loaded yet show the loading spinner
                                 <div class="flex items-center justify-center">
                                     <span class="loading loading-spinner loading-lg" />
                                     <h1 class="ml-4 text-3xl font-bold">{ "Loading..." }</h1>
                                 </div>
                             } else {
+                                // The actual bit that shows the game tiles
                                 { display_games_for_mount.as_ref().map(|games| {
                                     (**games).iter().enumerate().map(|(i, game)| {
                                         html! {
@@ -542,11 +556,10 @@ pub fn history() -> Html {
                                     if games.len() == 0 {
                                         <div class="flex items-center justify-center">
                                             <h1 class="ml-4 text-3xl font-bold">
-                                                { "You have no local games." }
+                                                { "You have no games to show." }
                                             </h1>
                                         </div>
                                     } else {
-                                        //TODO figure this logic out
                                         if !(*pagination).fully_loaded {
                                             <div class="flex w-full justify-center">
                                                 <button
