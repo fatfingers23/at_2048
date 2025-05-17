@@ -1,10 +1,12 @@
 use crate::Route;
 use crate::agent::{StorageRequest, StorageResponse, StorageTask};
-use crate::at_repo_sync::AtRepoSyncError;
+use crate::at_repo_sync::{AtRepoSync, AtRepoSyncError};
 use crate::idb::{DB_NAME, GAME_STORE, RecordStorageWrapper, paginated_cursor};
+use crate::oauth_client::oauth_client;
 use crate::pages::game::TileProps;
 use crate::store::UserStore;
 use StorageResponse::RepoError;
+use atrium_api::agent::Agent;
 use atrium_api::types::string::Did;
 use gloo::dialogs::{alert, confirm};
 use indexed_db_futures::database::Database;
@@ -13,6 +15,7 @@ use twothousand_forty_eight::unified::game::GameState;
 use twothousand_forty_eight::unified::validation::{Validatable, ValidationResult};
 use twothousand_forty_eight::v2::recording::SeededRecording;
 use types_2048::blue::_2048::game;
+use types_2048::blue::_2048::game::RecordData;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlElement;
 use yew::platform::spawn_local;
@@ -54,6 +57,7 @@ impl From<TabState> for &'static str {
 #[derive(Properties, Clone, PartialEq)]
 struct HistoryTabProps {
     action: Callback<TabState>,
+    logged_in: bool,
 }
 #[function_component(HistoryTab)]
 fn tab_component(props: &HistoryTabProps) -> Html {
@@ -83,13 +87,15 @@ fn tab_component(props: &HistoryTabProps) -> Html {
             >
                 { "Local" }
             </a>
-            <a
-                onclick={onclick}
-                role="tab"
-                class={classes!("tab", (*tab_state == TabState::Remote).then(|| Some("tab-active")))}
-            >
-                { "Remote" }
-            </a>
+            if props.logged_in {
+                <a
+                    onclick={onclick}
+                    role="tab"
+                    class={classes!("tab", (*tab_state == TabState::Remote).then(|| Some("tab-active")))}
+                >
+                    { "Remote" }
+                </a>
+            }
             // <a
             //     {onclick}
             //     role="tab"
@@ -406,13 +412,45 @@ async fn get_local_games(
     ))
 }
 
+async fn get_remote_games(
+    did: Did,
+    pagination_options: PaginationOptions,
+) -> Result<Rc<Vec<Rc<RecordStorageWrapper<game::RecordData>>>>, AtRepoSyncError> {
+    let oauth_client = oauth_client();
+    let session = match oauth_client.restore(&did).await {
+        Ok(session) => session,
+        Err(err) => {
+            return Err(AtRepoSyncError::Error(err.to_string()));
+        }
+    };
+    let agent = Agent::new(session);
+    let at_repo_sync = AtRepoSync::new_logged_in_repo(agent, did);
+    match at_repo_sync
+        .get_remote_games(
+            pagination_options.at_proto_cursor,
+            Some(pagination_options.count as u8),
+        )
+        .await
+    {
+        Ok(results) => Ok(results),
+        Err(err) => Err(AtRepoSyncError::Error(err.to_string())),
+    }
+}
+
 async fn get_games(
     tab_state: &TabState,
     options: PaginationOptions,
+    did: Option<Did>,
 ) -> Result<Rc<Vec<Rc<RecordStorageWrapper<game::RecordData>>>>, AtRepoSyncError> {
     match tab_state {
         TabState::Local => get_local_games(options).await,
-        TabState::Remote => Ok(vec![].into()),
+        TabState::Remote => {
+            if let Some(did) = did.clone() {
+                get_remote_games(did, options).await
+            } else {
+                Err(AtRepoSyncError::AuthErrorNeedToReLogin)
+            }
+        }
         TabState::Both => {
             //May not implement this
             todo!()
@@ -462,12 +500,14 @@ pub fn history() -> Html {
     let tab_click_callback = {
         let display_games = display_games_for_mount.clone();
         let pagination_clone = pagination_clone.clone();
+        let user_store = user_store.clone();
         Callback::from(move |tab_state: TabState| {
             pagination_clone.set(PaginationOptions::default());
             let display_games = display_games.clone();
+            let did = user_store.did.clone();
             spawn_local(async move {
                 //Just defaulting pagination on tab change
-                match get_games(&tab_state, PaginationOptions::default()).await {
+                match get_games(&tab_state, PaginationOptions::default(), did).await {
                     Ok(games) => &display_games.set(Some(games)),
                     Err(err) => {
                         log::error!("{:?}", err);
@@ -485,15 +525,17 @@ pub fn history() -> Html {
         let pagination = load_more_pagination_clone.clone();
         let display_games = load_more_games_clone.clone();
         let current_tab_state = load_more_tab_clone.clone();
+        let user_store = user_store.clone();
         Callback::from(move |_: MouseEvent| {
             let pagination = pagination.clone();
             let display_games = display_games.clone();
             let current_tab_state = current_tab_state.clone();
+            let did = user_store.did.clone();
             let mut new_pagination = PaginationOptions::default();
             new_pagination.skip = pagination.skip + new_pagination.count;
             new_pagination.at_proto_cursor = pagination.at_proto_cursor.clone();
             spawn_local(async move {
-                match get_games(current_tab_state.as_ref(), new_pagination.clone()).await {
+                match get_games(current_tab_state.as_ref(), new_pagination.clone(), did).await {
                     Ok(games) => {
                         let mut combined = match &*display_games {
                             Some(games) => games.as_ref().to_vec(),
@@ -515,19 +557,23 @@ pub fn history() -> Html {
     let reload_callback_pagination_clone = pagination_clone.clone();
     let games_reload_callback_clone = display_games_for_mount.clone();
     let current_tab_state_clone = current_tab_state.clone();
-    let reload_callback = Callback::from(move |_| {
-        let display_games = games_reload_callback_clone.clone();
-        let pagination = reload_callback_pagination_clone.clone();
-        let current_tab_state = current_tab_state_clone.clone();
-        spawn_local(async move {
-            match get_games(current_tab_state.as_ref(), (*pagination).clone()).await {
-                Ok(games) => display_games.set(Some(games)),
-                Err(err) => {
-                    log::error!("{:?}", err);
-                }
-            };
+    let reload_callback = {
+        let user_store = user_store.clone();
+        Callback::from(move |_| {
+            let display_games = games_reload_callback_clone.clone();
+            let pagination = reload_callback_pagination_clone.clone();
+            let current_tab_state = current_tab_state_clone.clone();
+            let did = user_store.did.clone();
+            spawn_local(async move {
+                match get_games(current_tab_state.as_ref(), (*pagination).clone(), did).await {
+                    Ok(games) => display_games.set(Some(games)),
+                    Err(err) => {
+                        log::error!("{:?}", err);
+                    }
+                };
+            })
         })
-    });
+    };
 
     html! {
         <div class="md:p-4 p-1">
@@ -535,7 +581,7 @@ pub fn history() -> Html {
                 <h1 class="text-4xl font-bold text-center md:mb-6 mb-1">{ "Game History" }</h1>
                 <div class="bg-base-100 shadow-lg rounded-lg md:p-6 p-1">
                     <div class="w-full max-w-2xl mx-auto">
-                        <HistoryTab action={tab_click_callback} />
+                        <HistoryTab action={tab_click_callback} logged_in={user_store.did.is_some()}/>
                         <div class="grid grid-cols-1 gap-6">
                             if display_games_for_mount.is_none() {
                                 //If the games have not loaded yet show the loading spinner
@@ -548,14 +594,14 @@ pub fn history() -> Html {
                                 { display_games_for_mount.as_ref().map(|games| {
                                     (**games).iter().enumerate().map(|(i, game)| {
                                         html! {
-                                            <GameTile key={i} game={game.clone()} did={user_store.did.clone()} reload_action={reload_callback.clone()} />
+                                            <GameTile key={game.clone().rkey.to_string()} game={game.clone()} did={user_store.did.clone()} reload_action={reload_callback.clone()} />
                                         }
                                     }).collect::<Html>()
                                 }).unwrap_or_default() }
                                 if let Some(games) = display_games.as_ref() {
                                     if games.len() == 0 {
                                         <div class="flex items-center justify-center">
-                                            <h1 class="ml-4 text-3xl font-bold">
+                                            <h1 class="pt-2 ml-4 text-3xl font-bold">
                                                 { "You have no games to show." }
                                             </h1>
                                         </div>

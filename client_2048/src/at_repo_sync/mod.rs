@@ -5,14 +5,16 @@ use crate::idb::{
 };
 use crate::resolver::ApiDNSTxtResolver;
 use atrium_api::agent::Agent;
-use atrium_api::types::Collection;
-use atrium_api::types::string::{AtIdentifier, Datetime, Did, RecordKey};
+use atrium_api::com::atproto::repo::list_records::Record;
+use atrium_api::types::string::{AtIdentifier, Datetime, Did, RecordKey, Tid};
+use atrium_api::types::{Collection, LimitedNonZeroU8, LimitedNonZeroU16, LimitedU32};
 use atrium_identity::did::CommonDidResolver;
 use atrium_identity::handle::AtprotoHandleResolver;
 use atrium_oauth::{DefaultHttpClient, OAuthSession};
 use atrium_xrpc::Error::Authentication;
 use indexed_db_futures::database::Database;
 use serde::{Deserialize, Serialize};
+use std::rc::Rc;
 use types_2048::blue;
 use types_2048::blue::_2048;
 use types_2048::blue::_2048::player;
@@ -633,6 +635,77 @@ impl AtRepoSync
         match transaction_put(db, local_game_record.clone(), GAME_STORE, None).await {
             Ok(_) => Ok(()),
             Err(err) => Err(AtRepoSyncError::Error(err.to_string())),
+        }
+    }
+
+    pub async fn get_remote_games(
+        &self,
+        cursor: Option<String>,
+        limit: Option<u8>,
+    ) -> Result<Rc<Vec<Rc<RecordStorageWrapper<blue::_2048::game::RecordData>>>>, AtRepoSyncError>
+    {
+        let client = match self.client.as_ref() {
+            None => {
+                return Err(AtRepoSyncError::Error(String::from(
+                    "There was no client setup.",
+                )));
+            }
+            Some(client) => client,
+        };
+        // Some(LimitedNonZeroU16::try_from(2000_u16).unwrap()),
+        let limit = match limit {
+            None => None,
+            Some(limit) => LimitedNonZeroU8::try_from(limit).ok(),
+        };
+
+        //HACK unwrapping the did for now since we know we have it since we have a client
+        let did = self.users_did.clone().unwrap();
+
+        match client
+            .api
+            .com
+            .atproto
+            .repo
+            .list_records(
+                atrium_api::com::atproto::repo::list_records::ParametersData {
+                    collection: blue::_2048::Game::NSID.parse().unwrap(),
+                    cursor,
+                    limit,
+                    repo: AtIdentifier::Did(did),
+                    reverse: None,
+                }
+                .into(),
+            )
+            .await
+        {
+            Ok(result) => {
+                //TODO will need to return the cursor later as well so we know where we left off
+                // Ok(Rc::from(
+                //     result
+                //         .records
+                //         .iter()
+                //         .map(|game| Rc::new(game.value.clone().into()))
+                //         .collect::<Vec<Rc<blue::_2048::game::RecordData>>>(),
+                // ))
+                Ok(Rc::from(
+                    result
+                        .records
+                        .iter()
+                        .map(|record| {
+                            Rc::new(RecordStorageWrapper {
+                                //TODO Example at://did:plc:rnpkyqnmsw4ipey6eotbdnnf/blue.2048.game/3lp67dwg62k22
+                                // Looks like we don't have the rkey, just the uri so have to write a parser?
+                                // Creating a new one for right now just for proof of concept
+                                rkey: Tid::now(LimitedU32::MIN).parse().unwrap(),
+                                record: record.value.clone().into(),
+                                //HACK come back or leave empty for now
+                                index_hash: "".to_string(),
+                            })
+                        })
+                        .collect::<Vec<Rc<RecordStorageWrapper<blue::_2048::game::RecordData>>>>(),
+                ))
+            }
+            Err(err) => Err(AtRepoSyncError::AtRepoCallError(err.to_string())),
         }
     }
 
