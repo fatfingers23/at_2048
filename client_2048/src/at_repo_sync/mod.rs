@@ -642,8 +642,13 @@ impl AtRepoSync
         &self,
         cursor: Option<String>,
         limit: Option<u8>,
-    ) -> Result<Rc<Vec<Rc<RecordStorageWrapper<blue::_2048::game::RecordData>>>>, AtRepoSyncError>
-    {
+    ) -> Result<
+        (
+            Rc<Vec<Rc<RecordStorageWrapper<blue::_2048::game::RecordData>>>>,
+            Option<String>,
+        ),
+        AtRepoSyncError,
+    > {
         let client = match self.client.as_ref() {
             None => {
                 return Err(AtRepoSyncError::Error(String::from(
@@ -687,7 +692,7 @@ impl AtRepoSync
                 //         .map(|game| Rc::new(game.value.clone().into()))
                 //         .collect::<Vec<Rc<blue::_2048::game::RecordData>>>(),
                 // ))
-                Ok(Rc::from(
+                Ok((Rc::from(
                     result
                         .records
                         .iter()
@@ -703,54 +708,9 @@ impl AtRepoSync
                             })
                         })
                         .collect::<Vec<Rc<RecordStorageWrapper<blue::_2048::game::RecordData>>>>(),
-                ))
+                ), result.cursor.clone()))
             }
             Err(err) => Err(AtRepoSyncError::AtRepoCallError(err.to_string())),
         }
     }
-
-    pub async fn _local_game_cursor(&self, _count: u32, _skip: u32) -> Result<(), AtRepoSyncError> {
-        let _db = Database::open(DB_NAME)
-            .await
-            .map_err(|e| AtRepoSyncError::Error(e.to_string()))?;
-
-        Err(AtRepoSyncError::Error("Not implemented".to_string()))
-    }
-
-    //TODO just scraping the current game sync for now. Dont think it is needed
-    // pub async fn get_current_game(&self) -> Result<game::RecordData, AtRepoSyncError> {
-    //     //TODO change to be same as ATProto repo where we get current game from player profile and not local profile
-    //     let db = match Database::open(DB_NAME).await {
-    //         Ok(db) => db,
-    //         Err(err) => {
-    //             return Err(AtRepoSyncError::ThereWasAnError(err.to_string()));
-    //         }
-    //     };
-    //
-    //     let _possible_local_current_game =
-    //         match object_get::<game::RecordData>(db, CURRENT_GAME_STORE, SELF_KEY).await {
-    //             Ok(possible_local_game) => possible_local_game,
-    //             Err(err) => {
-    //                 return Err(AtRepoSyncError::ThereWasAnError(err.to_string()));
-    //             }
-    //         };
-    //
-    //     // let remote_users_profile = self.client.api.com.atproto.repo.get_record(
-    //     //     atrium_api::com::atproto::repo::get_record::ParametersData {
-    //     //         cid: None,
-    //     //         collection: blue::_2048::player::Profile::NSID.parse().unwrap(),
-    //     //         repo: AtIdentifier::Did(self.users_did.clone()),
-    //     //         rkey: SELF_KEY.parse().unwrap(),
-    //     //     }
-    //     //     .into(),
-    //     // );
-    //
-    //     //Check for local game
-    //     //Check for remote game
-    //     //If found in each and they are different compare and see which is newer to let the user decide
-    //     //If both are the same return the local game
-    //     //If none are found return a new game
-    //
-    //     Err(AtRepoSyncError::ThereWasAnError("Placeholder".to_string()))
-    // }
 }
