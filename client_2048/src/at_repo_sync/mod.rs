@@ -5,9 +5,8 @@ use crate::idb::{
 };
 use crate::resolver::ApiDNSTxtResolver;
 use atrium_api::agent::Agent;
-use atrium_api::com::atproto::repo::list_records::Record;
-use atrium_api::types::string::{AtIdentifier, Datetime, Did, RecordKey, Tid};
-use atrium_api::types::{Collection, LimitedNonZeroU8, LimitedNonZeroU16, LimitedU32};
+use atrium_api::types::string::{AtIdentifier, Datetime, Did, RecordKey};
+use atrium_api::types::{Collection, LimitedNonZeroU8};
 use atrium_identity::did::CommonDidResolver;
 use atrium_identity::handle::AtprotoHandleResolver;
 use atrium_oauth::{DefaultHttpClient, OAuthSession};
@@ -684,26 +683,19 @@ impl AtRepoSync
             .await
         {
             Ok(result) => {
-                //TODO will need to return the cursor later as well so we know where we left off
-                // Ok(Rc::from(
-                //     result
-                //         .records
-                //         .iter()
-                //         .map(|game| Rc::new(game.value.clone().into()))
-                //         .collect::<Vec<Rc<blue::_2048::game::RecordData>>>(),
-                // ))
                 Ok((Rc::from(
                     result
                         .records
                         .iter()
                         .map(|record| {
+                            let rkey = parse_record_key(&record.uri)
+                                .map_err(|e| AtRepoSyncError::Error(e))
+                                .unwrap();
                             Rc::new(RecordStorageWrapper {
-                                //TODO Example at://did:plc:rnpkyqnmsw4ipey6eotbdnnf/blue.2048.game/3lp67dwg62k22
-                                // Looks like we don't have the rkey, just the uri so have to write a parser?
-                                // Creating a new one for right now just for proof of concept
-                                rkey: Tid::now(LimitedU32::MIN).parse().unwrap(),
+                                rkey,
                                 record: record.value.clone().into(),
-                                //HACK come back or leave empty for now
+                                //Leaving empty for now. We can get the hash, but atm we're not syncing
+                                //remote to local so would affect that
                                 index_hash: "".to_string(),
                             })
                         })
@@ -713,4 +705,12 @@ impl AtRepoSync
             Err(err) => Err(AtRepoSyncError::AtRepoCallError(err.to_string())),
         }
     }
+}
+
+pub fn parse_record_key(at_uri: &str) -> Result<RecordKey, String> {
+    if let Some(record_key) = at_uri.split("/").last() {
+        let record_key = record_key.parse::<RecordKey>()?;
+        return Ok(record_key);
+    }
+    Err(String::from("Unable to parse record key"))
 }

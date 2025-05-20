@@ -16,13 +16,12 @@ use twothousand_forty_eight::unified::game::GameState;
 use twothousand_forty_eight::unified::validation::{Validatable, ValidationResult};
 use twothousand_forty_eight::v2::recording::SeededRecording;
 use types_2048::blue::_2048::game;
-use types_2048::blue::_2048::game::RecordData;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlElement;
 use yew::platform::spawn_local;
 use yew::prelude::*;
 use yew_agent::oneshot::use_oneshot_runner;
-use yew_hooks::{use_effect_once, use_update};
+use yew_hooks::use_effect_once;
 use yew_router::hooks::use_navigator;
 use yew_router::prelude::Link;
 use yewdux::use_store;
@@ -185,7 +184,6 @@ struct GameTileProps {
 #[function_component(GameTile)]
 fn game_tile(props: &GameTileProps) -> Html {
     let record_key = props.game.rkey.clone();
-    let game = props.game.record.clone();
     let seeded_recording = use_state(|| None);
     let validation_result: UseStateHandle<Option<ValidationResult>> = use_state(|| None);
     let resync_loading = use_state(|| false);

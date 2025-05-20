@@ -208,7 +208,6 @@ where
         .await
         .map_err(|e| StorageError::Error(e.to_string()))?
     else {
-        log::debug!("Cursor empty");
         return Ok(None);
     };
     cursor
@@ -251,7 +250,6 @@ where
         .await
         .map_err(|e| StorageError::Error(e.to_string()))?
     else {
-        log::debug!("Cursor empty");
         return Ok(result_items);
     };
 
@@ -264,11 +262,14 @@ where
             Ok(result) => {
                 if let Some(item) = result {
                     result_items.push(item);
+                } else {
+                    //Once the cursor is empty, we break
+                    // because the next record looks to try and serialize
+                    break;
                 }
             }
             Err(err) => {
                 log::error!("Error getting next record: {}", err);
-                // return Err(StorageError::Error(err.to_string()));
             }
         }
     }

@@ -92,7 +92,6 @@ fn Main() -> Html {
     let submenu_entry_onclick = Callback::from(move |_: MouseEvent| {
         let collection = document().get_elements_by_class_name("lg:dropdown");
         for i in 0..collection.length() {
-            log::info!("{:?}", i);
             if let Some(element) = collection.item(i) {
                 let element: HtmlElement = element.unchecked_into();
                 let _ = element.remove_attribute("open");
