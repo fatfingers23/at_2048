@@ -1,13 +1,12 @@
 [package]
-name = "app_2048"
+name = "client_2048"
 version = "0.1.0"
 edition = "2024"
-description = "Template for starting a Yew project using Trunk"
+description = "A 2048 game that syncs to your AT Protocol repo"
 readme = "README.md"
-repository = "https://github.com/yewstack/yew-trunk-minimal-template"
-license = "MIT OR Apache-2.0"
-keywords = ["yew", "trunk"]
-categories = ["gui", "wasm", "web-programming"]
+repository = "https://github.com/fatfingers23/at_2048"
+license = "MIT"
+keywords = ["ATprotocol", "Bluesky", "game", "wasm"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
@@ -20,7 +19,7 @@ twothousand-forty-eight.workspace = true
 yew-agent = "0.3.0"
 yew = { version = "0.21", features = ["csr"] }
 yew-router = "0.18.0"
-web-sys = { version = "0.3.77", features = ["default", "HtmlElement", "HtmlSelectElement", "HtmlHtmlElement", "TouchList", "TouchEvent", "Touch", "MediaQueryList"] }
+web-sys = { version = "0.3.77", features = ["default", "HtmlElement", "HtmlSelectElement", "HtmlHtmlElement", "TouchList", "TouchEvent", "Touch", "MediaQueryList", "HtmlCollection"] }
 rand = "0.8.5"
 log = "0.4.27"
 wasm-logger = "0.2.0"
@@ -39,5 +38,4 @@ indexed_db_futures = { version = "0.6.1", features = ["serde", "cursors", "versi
 yew-hooks = "0.3.3"
 yewdux = "0.11.0"
 xxhash-rust = { version = "0.8.15", features = ["const_xxh3"] }
-#hickory-resolver = { version = "0.24.1", features = ["dns-over-https", "dns-over-https-rustls", ""] }
-
+implicit-clone = { version = "0.6.0", features = ["map"] }

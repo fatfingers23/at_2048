@@ -141,7 +141,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d301b3b94cb4b2f23d7917810addbbaff90738e0ca2be692bd027e70d7e0330c"
 
 [[package]]
-name = "api_2048"
+name = "appview_2048"
 version = "0.1.0"
 dependencies = [
  "dropshot",
@@ -150,40 +150,6 @@ dependencies = [
  "serde",
  "tokio",
  "toml",
-]
-
-[[package]]
-name = "app_2048"
-version = "0.1.0"
-dependencies = [
- "atrium-api",
- "atrium-common",
- "atrium-identity",
- "atrium-oauth",
- "atrium-xrpc",
- "console_error_panic_hook",
- "gloo 0.11.0",
- "gloo-utils 0.2.0",
- "indexed_db_futures",
- "js-sys",
- "log",
- "numfmt",
- "postcard",
- "rand",
- "serde",
- "serde_html_form",
- "serde_json",
- "twothousand-forty-eight",
- "types-2048",
- "wasm-bindgen",
- "wasm-logger",
- "web-sys",
- "xxhash-rust",
- "yew",
- "yew-agent",
- "yew-hooks",
- "yew-router",
- "yewdux",
 ]
 
 [[package]]
@@ -563,6 +529,41 @@ name = "clap_lex"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
+
+[[package]]
+name = "client_2048"
+version = "0.1.0"
+dependencies = [
+ "atrium-api",
+ "atrium-common",
+ "atrium-identity",
+ "atrium-oauth",
+ "atrium-xrpc",
+ "console_error_panic_hook",
+ "gloo 0.11.0",
+ "gloo-utils 0.2.0",
+ "implicit-clone 0.6.0",
+ "indexed_db_futures",
+ "js-sys",
+ "log",
+ "numfmt",
+ "postcard",
+ "rand",
+ "serde",
+ "serde_html_form",
+ "serde_json",
+ "twothousand-forty-eight",
+ "types-2048",
+ "wasm-bindgen",
+ "wasm-logger",
+ "web-sys",
+ "xxhash-rust",
+ "yew",
+ "yew-agent",
+ "yew-hooks",
+ "yew-router",
+ "yewdux",
+]
 
 [[package]]
 name = "cobs"
@@ -2212,6 +2213,16 @@ name = "implicit-clone"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8a9aa791c7b5a71b636b7a68207fdebf171ddfc593d9c8506ec4cbc527b6a84"
+dependencies = [
+ "implicit-clone-derive",
+ "indexmap",
+]
+
+[[package]]
+name = "implicit-clone"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1689b939ee35e3a075b0834b5672efd43aec8a6e81a1c6002b76a5ca2f211ae0"
 dependencies = [
  "implicit-clone-derive",
  "indexmap",
@@ -4875,7 +4886,7 @@ dependencies = [
  "console_error_panic_hook",
  "futures",
  "gloo 0.10.0",
- "implicit-clone",
+ "implicit-clone 0.4.9",
  "indexmap",
  "js-sys",
  "prokio",

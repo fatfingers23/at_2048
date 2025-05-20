@@ -1,4 +1,5 @@
 use atrium_api::types::string::RecordKey;
+use indexed_db_futures::cursor::CursorDirection;
 use indexed_db_futures::database::Database;
 use indexed_db_futures::error::OpenDbError;
 use indexed_db_futures::prelude::*;
@@ -207,13 +208,72 @@ where
         .await
         .map_err(|e| StorageError::Error(e.to_string()))?
     else {
-        log::debug!("Cursor empty");
         return Ok(None);
     };
     cursor
         .next_record_ser()
         .await
         .map_err(|err| StorageError::Error(err.to_string()))
+}
+
+pub async fn paginated_cursor<T>(
+    db: Database,
+    store: &str,
+    count: u32,
+    skip: u32,
+) -> Result<Vec<T>, StorageError>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    let transaction = match db
+        .transaction(store)
+        .with_mode(TransactionMode::Readonly)
+        .build()
+    {
+        Ok(transaction) => transaction,
+        Err(err) => {
+            return Err(StorageError::Error(err.to_string()));
+        }
+    };
+
+    let store = match transaction.object_store(store) {
+        Ok(store) => store,
+        Err(err) => {
+            return Err(StorageError::Error(err.to_string()));
+        }
+    };
+
+    let mut result_items: Vec<T> = vec![];
+    let Some(mut cursor) = store
+        .open_cursor()
+        .with_direction(CursorDirection::Prev)
+        .await
+        .map_err(|e| StorageError::Error(e.to_string()))?
+    else {
+        return Ok(result_items);
+    };
+
+    cursor
+        .advance_by(skip)
+        .await
+        .map_err(|e| StorageError::Error(e.to_string()))?;
+    for _ in 0..count {
+        match cursor.next_record_ser::<T>().await {
+            Ok(result) => {
+                if let Some(item) = result {
+                    result_items.push(item);
+                } else {
+                    //Once the cursor is empty, we break
+                    // because the next record looks to try and serialize
+                    break;
+                }
+            }
+            Err(err) => {
+                log::error!("Error getting next record: {}", err);
+            }
+        }
+    }
+    Ok(result_items)
 }
 
 pub async fn object_delete(db: Database, store: &str, key: &str) -> Result<(), StorageError> {

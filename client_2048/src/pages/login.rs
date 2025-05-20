@@ -12,7 +12,7 @@ use yew_hooks::use_effect_once;
 use yewdux::use_store;
 
 pub async fn redirect_to_auth(handle: String) -> Result<(), String> {
-    let client = oauth_client().await;
+    let client = oauth_client();
     let oauth_client = client.clone();
 
     let url = oauth_client
@@ -84,7 +84,7 @@ pub fn login(props: &LoginProps) -> Html {
                     Err(err) => Some(err.to_string()),
                 };
                 if let Some(error) = error {
-                    dispatch.set(UserStore { did: None });
+                    dispatch.set(UserStore::default());
                     error_state_effect.set(Some(format!("Error from redirect: {}", error)));
                 }
             });

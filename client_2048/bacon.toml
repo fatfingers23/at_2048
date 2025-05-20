@@ -1,0 +1,2 @@
+[jobs.check-wasm]
+command = ["cargo", "check", "--target", "wasm32-unknown-unknown"]

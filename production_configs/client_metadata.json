@@ -13,5 +13,7 @@
   "scope": "atproto transition:generic",
   "response_types": [
     "code"
-  ]
+  ],
+  "client_name": "at://2048",
+  "logo_uri": "https://2048.blue/icon.png"
 }

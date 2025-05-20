@@ -56,7 +56,7 @@ async fn main() -> Result<(), String> {
     // api.register(static_content).unwrap();
 
     let context = FileServerContext {
-        base: PathBuf::from("./app_2048/dist/"),
+        base: PathBuf::from("../../client_2048/dist/"),
     };
 
     let server = ServerBuilder::new(api, context, log)

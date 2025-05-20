@@ -1,7 +1,7 @@
 FROM rust:1.86.0-bookworm AS api-builder
 WORKDIR /app
 COPY ../ /app
-RUN cargo build --bin api_2048 --release
+RUN cargo build --bin appview_2048 --release
 #
 FROM rust:1.86-slim-bookworm AS api
 COPY --from=api-builder /app/target/release/api_2048 /usr/local/bin/api_2048

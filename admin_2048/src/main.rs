@@ -61,6 +61,7 @@ struct TempLeaderboardPlace {
     pub pds_url: String,
     pub top_score: Option<usize>,
     pub top_score_uri: Option<String>,
+    pub games_played: usize,
 }
 async fn create_a_temp_leaderboard() -> anyhow::Result<()> {
     log::info!("Creating a temp leaderboard...");
@@ -130,6 +131,7 @@ async fn create_a_temp_leaderboard() -> anyhow::Result<()> {
                         pds_url,
                         top_score: None,
                         top_score_uri: None,
+                        games_played: 0,
                     }],
                 );
             }
@@ -140,6 +142,7 @@ async fn create_a_temp_leaderboard() -> anyhow::Result<()> {
                     pds_url: pds_url.clone(),
                     top_score: None,
                     top_score_uri: None,
+                    games_played: 0,
                 });
             }
         }
@@ -152,6 +155,8 @@ async fn create_a_temp_leaderboard() -> anyhow::Result<()> {
         resolve_count
     );
 
+    let mut global_games_played = 0;
+
     let mut leaderboards: Vec<TempLeaderboardPlace> = Vec::new();
     for (pds_url, repos) in hashmap_by_pds.iter_mut() {
         log::info!("Getting {} repos from {},", repos.len(), pds_url);
@@ -159,14 +164,19 @@ async fn create_a_temp_leaderboard() -> anyhow::Result<()> {
         for repo in repos {
             match get_top_game(&pds_agent, &repo.did, &repo.handle).await {
                 Ok(new_leaderboard_place) => {
+                    global_games_played += new_leaderboard_place.games_played;
                     leaderboards.push(new_leaderboard_place);
                 }
                 Err(err) => {
                     log::error!("Error getting top game: {}", err);
+                    log::error!("Skipping repo: {}", repo.did.to_string());
+                    continue;
                 }
             }
         }
     }
+
+    log::info!("{} games played", global_games_played);
 
     // Sort leaderboards by top score in descending order
     leaderboards.sort_by(|a, b| b.top_score.cmp(&a.top_score));
@@ -195,7 +205,7 @@ async fn get_top_game(
     let mut keep_calling = true;
     let mut top_score = 0;
     let mut top_score_uri: Option<String> = None;
-
+    let mut games_played: usize = 0;
     while keep_calling {
         log::info!("Getting top game for {}", did.clone().to_string());
         match atp_agent
@@ -222,6 +232,7 @@ async fn get_top_game(
                     keep_calling = false;
                     cursor = None;
                 }
+                games_played += output.records.len();
 
                 for record in &output.records {
                     let game: types_2048::blue::_2048::game::RecordData =
@@ -235,11 +246,15 @@ async fn get_top_game(
                         }
                         Err(err) => {
                             log::error!("Error parsing game: {}", err);
+                            continue;
                         }
                     }
                 }
             }
-            Err(e) => log::error!("Error getting top game: {}", e),
+            Err(e) => {
+                log::error!("Error getting top game: {}", e);
+                break;
+            }
         };
     }
 
@@ -249,6 +264,7 @@ async fn get_top_game(
         pds_url: "https://relay1.us-east.bsky.network".to_string(),
         top_score: Some(top_score),
         top_score_uri: top_score_uri,
+        games_played,
     })
 }
 

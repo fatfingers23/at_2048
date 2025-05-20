@@ -5,14 +5,15 @@ use crate::idb::{
 };
 use crate::resolver::ApiDNSTxtResolver;
 use atrium_api::agent::Agent;
-use atrium_api::types::Collection;
-use atrium_api::types::string::{AtIdentifier, Datetime, Did, RecordKey, Tid};
+use atrium_api::types::string::{AtIdentifier, Datetime, Did, RecordKey};
+use atrium_api::types::{Collection, LimitedNonZeroU8};
 use atrium_identity::did::CommonDidResolver;
 use atrium_identity::handle::AtprotoHandleResolver;
 use atrium_oauth::{DefaultHttpClient, OAuthSession};
 use atrium_xrpc::Error::Authentication;
 use indexed_db_futures::database::Database;
 use serde::{Deserialize, Serialize};
+use std::rc::Rc;
 use types_2048::blue;
 use types_2048::blue::_2048;
 use types_2048::blue::_2048::player;
@@ -67,7 +68,6 @@ impl std::fmt::Display for AtRepoSyncError {
     }
 }
 
-// #[derive(Clone)]
 pub struct AtRepoSync
 // where
 //     Repo: AtRepoSyncTrait,
@@ -558,10 +558,9 @@ impl AtRepoSync
     pub async fn create_a_new_game(
         &self,
         mut new_game: blue::_2048::game::RecordData,
-        key: Tid,
+        record_key: RecordKey,
         game_hash: String,
     ) -> Result<(), AtRepoSyncError> {
-        let record_key: RecordKey = key.parse().unwrap();
         let string_data = serde_json::to_string(&new_game).unwrap();
         let hash = const_xxh3(string_data.as_bytes());
         new_game.sync_status.hash = format!("{:x}", hash);
@@ -600,6 +599,9 @@ impl AtRepoSync
                                 return Err(AtRepoSyncError::AuthErrorNeedToReLogin);
                             }
                             _ => {
+                                return Err(AtRepoSyncError::Error(String::from(
+                                    "Error saving the game remotely",
+                                )));
                                 //Just going to log errors "quietly" as I figure out how to handle them
                             }
                         }
@@ -635,40 +637,80 @@ impl AtRepoSync
         }
     }
 
-    //TODO just scraping the current game sync for now. Dont think it is needed
-    // pub async fn get_current_game(&self) -> Result<game::RecordData, AtRepoSyncError> {
-    //     //TODO change to be same as ATProto repo where we get current game from player profile and not local profile
-    //     let db = match Database::open(DB_NAME).await {
-    //         Ok(db) => db,
-    //         Err(err) => {
-    //             return Err(AtRepoSyncError::ThereWasAnError(err.to_string()));
-    //         }
-    //     };
-    //
-    //     let _possible_local_current_game =
-    //         match object_get::<game::RecordData>(db, CURRENT_GAME_STORE, SELF_KEY).await {
-    //             Ok(possible_local_game) => possible_local_game,
-    //             Err(err) => {
-    //                 return Err(AtRepoSyncError::ThereWasAnError(err.to_string()));
-    //             }
-    //         };
-    //
-    //     // let remote_users_profile = self.client.api.com.atproto.repo.get_record(
-    //     //     atrium_api::com::atproto::repo::get_record::ParametersData {
-    //     //         cid: None,
-    //     //         collection: blue::_2048::player::Profile::NSID.parse().unwrap(),
-    //     //         repo: AtIdentifier::Did(self.users_did.clone()),
-    //     //         rkey: SELF_KEY.parse().unwrap(),
-    //     //     }
-    //     //     .into(),
-    //     // );
-    //
-    //     //Check for local game
-    //     //Check for remote game
-    //     //If found in each and they are different compare and see which is newer to let the user decide
-    //     //If both are the same return the local game
-    //     //If none are found return a new game
-    //
-    //     Err(AtRepoSyncError::ThereWasAnError("Placeholder".to_string()))
-    // }
+    pub async fn get_remote_games(
+        &self,
+        cursor: Option<String>,
+        limit: Option<u8>,
+    ) -> Result<
+        (
+            Rc<Vec<Rc<RecordStorageWrapper<blue::_2048::game::RecordData>>>>,
+            Option<String>,
+        ),
+        AtRepoSyncError,
+    > {
+        let client = match self.client.as_ref() {
+            None => {
+                return Err(AtRepoSyncError::Error(String::from(
+                    "There was no client setup.",
+                )));
+            }
+            Some(client) => client,
+        };
+        // Some(LimitedNonZeroU16::try_from(2000_u16).unwrap()),
+        let limit = match limit {
+            None => None,
+            Some(limit) => LimitedNonZeroU8::try_from(limit).ok(),
+        };
+
+        //HACK unwrapping the did for now since we know we have it since we have a client
+        let did = self.users_did.clone().unwrap();
+
+        match client
+            .api
+            .com
+            .atproto
+            .repo
+            .list_records(
+                atrium_api::com::atproto::repo::list_records::ParametersData {
+                    collection: blue::_2048::Game::NSID.parse().unwrap(),
+                    cursor,
+                    limit,
+                    repo: AtIdentifier::Did(did),
+                    reverse: None,
+                }
+                .into(),
+            )
+            .await
+        {
+            Ok(result) => {
+                Ok((Rc::from(
+                    result
+                        .records
+                        .iter()
+                        .map(|record| {
+                            let rkey = parse_record_key(&record.uri)
+                                .map_err(|e| AtRepoSyncError::Error(e))
+                                .unwrap();
+                            Rc::new(RecordStorageWrapper {
+                                rkey,
+                                record: record.value.clone().into(),
+                                //Leaving empty for now. We can get the hash, but atm we're not syncing
+                                //remote to local so would affect that
+                                index_hash: "".to_string(),
+                            })
+                        })
+                        .collect::<Vec<Rc<RecordStorageWrapper<blue::_2048::game::RecordData>>>>(),
+                ), result.cursor.clone()))
+            }
+            Err(err) => Err(AtRepoSyncError::AtRepoCallError(err.to_string())),
+        }
+    }
+}
+
+pub fn parse_record_key(at_uri: &str) -> Result<RecordKey, String> {
+    if let Some(record_key) = at_uri.split("/").last() {
+        let record_key = record_key.parse::<RecordKey>()?;
+        return Ok(record_key);
+    }
+    Err(String::from("Unable to parse record key"))
 }
