@@ -89,7 +89,7 @@ fn Main() -> Html {
         check_drawer_open();
     });
 
-    let submenu_entry_onclick = Callback::from(move |_: MouseEvent| {
+    let _submenu_entry_onclick = Callback::from(move |_: MouseEvent| {
         let collection = document().get_elements_by_class_name("lg:dropdown");
         for i in 0..collection.length() {
             if let Some(element) = collection.item(i) {
@@ -170,44 +170,46 @@ fn Main() -> Html {
 
     let mut links: Vec<Html> = vec![
         html! {<li key=1 onclick={menu_entry_onclick.clone()}><Link<Route> to={Route::GamePage}>{ "Play" }</Link<Route>></li>},
-        html! {
-        <li key={2}>
-            <details class="lg:dropdown">
-             <summary>{
-                match &user_store.handle {
-                    Some(handle) => handle.to_string(),
-                    None => "Profile".to_string()
-                }
-            }</summary>
-             <ul class="lg:menu lg:dropdown-content lg:bg-base-100 lg:rounded-box z-1 lg:w-52 p-2 lg:shadow-sm">
-               <li onclick={submenu_entry_onclick.clone()}><Link<Route> to={Route::StatsPage}>{ "Stats" }</Link<Route>></li>
-               <li onclick={submenu_entry_onclick.clone()}><Link<Route> to={Route::HistoryPage}>{ "History" }</Link<Route>></li>
-             </ul>
-            </details>
-           </li>
-           },
-        // html! {</li>},
+        html! {<li key=2 onclick={menu_entry_onclick.clone()}><Link<Route> to={Route::StatsPage}>{ "Stats" }</Link<Route>></li>},
+        html! {<li key=3 onclick={menu_entry_onclick.clone()}><Link<Route> to={Route::HistoryPage}>{ "History" }</Link<Route>></li>},
+        //WIll come back to this, just buggy and clicks wrong entry sometimes
+        // html! {
+        // <li key={2}>
+        //     <details class="lg:dropdown invisible md:visible">
+        //      <summary>{
+        //         match &user_store.handle {
+        //             Some(handle) => handle.to_string(),
+        //             None => "Profile".to_string()
+        //         }
+        //     }</summary>
+        //      <ul class="lg:menu lg:dropdown-content lg:bg-base-100 lg:rounded-box z-1 lg:w-52 p-2 lg:shadow-sm">
+        //        <li onclick={submenu_entry_onclick.clone()}><Link<Route> to={Route::StatsPage}>{ "Stats" }</Link<Route>></li>
+        //        <li onclick={submenu_entry_onclick.clone()}><Link<Route> to={Route::HistoryPage}>{ "History" }</Link<Route>></li>
+        //      </ul>
+        //     </details>
+        //    </li>
+        //    },
     ];
-
-    if user_store.did.is_some() {
-        links.push(html! {
-            <li key=3>
-                <a class="cursor-pointer" {onclick}>{ "Logout" }</a>
-            </li>
-        });
-    } else {
-        links.push(html! {
-            <li key=3 {onclick}>
-                <Link<Route> to={Route::LoginPage}>{ "Login" }</Link<Route>>
-            </li>
-        });
-    }
 
     links.push(html! {
         <li key=4>
             <a href="https://github.com/fatfingers23/at_2048">{ "GitHub" }</a>
         </li>
     });
+
+    if user_store.did.is_some() {
+        links.push(html! {
+            <li key=5>
+                <a class="cursor-pointer" {onclick}>{ "Logout" }</a>
+            </li>
+        });
+    } else {
+        links.push(html! {
+            <li key=5 {onclick}>
+                <Link<Route> to={Route::LoginPage}>{ "Login" }</Link<Route>>
+            </li>
+        });
+    }
 
     html! {
         <div class="drawer">
