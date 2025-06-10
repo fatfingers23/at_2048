@@ -44,32 +44,26 @@ impl Database {
     pub async fn insert_game(
         &self,
         record: &game::RecordData,
+        game_hash: String,
+        validated_score: i32,
         did: &str,
-        at_uri: &str,
+        at_uri: &String,
     ) -> Result<i64, DatabaseError> {
-        // Parse the seeded_recording string into a SeededRecording object
-        let seeded_recording = record
-            .seeded_recording
-            .parse::<SeededRecording>()
-            .map_err(|e| DatabaseError::ParseError(e.to_string()))?;
-
-        // Calculate the game hash using the game_hash method from the Hashable trait
-        let game_hash = seeded_recording.game_hash();
-
         // Convert record to JSONB
         let record_json = json!(record);
 
         // Insert the game record
         let id = sqlx::query!(
             r#"
-            INSERT INTO games (game_hash, did, at_uri, record)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO games (game_hash, did, at_uri, record, score)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id
             "#,
             game_hash,
             did,
             at_uri,
-            record_json
+            record_json,
+            validated_score,
         )
         .fetch_one(&self.pool)
         .await?

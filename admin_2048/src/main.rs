@@ -15,13 +15,15 @@ use atrium_identity::{
 };
 use atrium_oauth::DefaultHttpClient;
 use atrium_xrpc_client::reqwest::ReqwestClient;
+use backend_shared::database::Database;
+use backend_shared::game_util::parse_game_and_validate;
 use clap::{Parser, Subcommand};
+use dotenv::dotenv;
 use hickory_resolver::TokioAsyncResolver;
 use std::collections::HashMap;
 use std::sync::Arc;
 use twothousand_forty_eight::unified::validation::Validatable;
 use twothousand_forty_eight::v2::recording::SeededRecording;
-
 use types_2048::blue;
 
 const RELAY_ENDPOINT: &str = "https://relay1.us-west.bsky.network";
@@ -66,6 +68,9 @@ struct TempLeaderboardPlace {
 async fn create_a_temp_leaderboard() -> anyhow::Result<()> {
     log::info!("Creating a temp leaderboard...");
     let http_client = Arc::new(DefaultHttpClient::default());
+    dotenv().ok();
+    let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let database = Database::new(&db_url).await?;
     //finds the did document from the users did
     let did_resolver = CommonDidResolver::new(CommonDidResolverConfig {
         plc_directory_url: DEFAULT_PLC_DIRECTORY_URL.to_string(),
@@ -237,10 +242,18 @@ async fn get_top_game(
                 for record in &output.records {
                     let game: types_2048::blue::_2048::game::RecordData =
                         types_2048::blue::_2048::game::RecordData::from(record.value.clone());
+
                     match parse_game_and_validate(&game.seeded_recording) {
-                        Ok(real_score) => {
-                            if real_score > top_score {
-                                top_score = real_score;
+                        Ok(result) => {
+                            // let uri = record.uri.clone();
+                            // if let Err(error) = db
+                            //     .insert_game(&game, result.hash, result.score as i32, did, &uri)
+                            //     .await
+                            // {
+                            //     log::error!("Error inserting game: {}", error);
+                            // }
+                            if result.score > top_score {
+                                top_score = result.score;
                                 top_score_uri = Some(record.uri.clone());
                             }
                         }
@@ -268,31 +281,10 @@ async fn get_top_game(
     })
 }
 
-fn parse_game_and_validate(game: &String) -> anyhow::Result<usize> {
-    let history: SeededRecording = match game.parse() {
-        Ok(history) => history,
-        Err(err) => Err(anyhow::anyhow!("Error parsing game: {}", err))?,
-    };
-
-    return match history.validate() {
-        Ok(valid_history) => {
-            if valid_history.score > 0 {
-                Ok(valid_history.score)
-            } else {
-                Err(anyhow::anyhow!("Invalid game: {}", game))
-            }
-        }
-        Err(err) => {
-            log::error!("Error validating game: {}", err);
-            Err(anyhow::anyhow!("Invalid game: {}", game))
-        }
-    };
-}
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-
     let cli = Cli::parse();
     match &cli.command {
         Commands::Leaderboard(Leaderboard { subcommand }) => match subcommand {

@@ -39,7 +39,9 @@ dependencies = [
  "atrium-identity",
  "atrium-oauth",
  "atrium-xrpc-client",
+ "backend_shared",
  "clap",
+ "dotenv",
  "env_logger",
  "hickory-resolver",
  "log",
@@ -343,6 +345,17 @@ name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
+
+[[package]]
+name = "backend_shared"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.12",
+ "twothousand-forty-eight",
+ "types-2048",
+]
 
 [[package]]
 name = "backtrace"
@@ -814,17 +827,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "data_access"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "sqlx",
- "thiserror 2.0.12",
- "twothousand-forty-eight",
- "types-2048",
-]
-
-[[package]]
 name = "debug-ignore"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -968,6 +970,12 @@ dependencies = [
  "quote",
  "syn 2.0.100",
 ]
+
+[[package]]
+name = "dotenv"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
 
 [[package]]
 name = "dotenvy"

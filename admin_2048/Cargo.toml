@@ -17,3 +17,5 @@ env_logger = "0.11.8"
 log = "0.4.27"
 hickory-resolver = "0.24.1"
 twothousand-forty-eight.workspace = true
+dotenv = "0.15.0"
+backend_shared.workspace = true

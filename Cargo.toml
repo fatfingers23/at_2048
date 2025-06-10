@@ -1,5 +1,5 @@
 [workspace]
-members = ["admin_2048", "appview_2048", "client_2048", "data_access", "types_2048"]
+members = ["admin_2048", "appview_2048", "client_2048", "backend_shared", "types_2048"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -16,4 +16,4 @@ twothousand-forty-eight = { version = "0.22.1", features = [
 serde = { version = "1.0.219", features = ["derive"] }
 tokio = { version = "1.44.1", features = ["full"] }
 types-2048 = { path = "./types_2048" }
-data-access = { path = "./data_access" }
+backend_shared = { path = "./backend_shared" }
