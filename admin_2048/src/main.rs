@@ -1,7 +1,6 @@
 use atrium_api::agent::atp_agent::AtpSession;
-use atrium_api::com::atproto::sync::list_repos_by_collection::Repo;
-use atrium_api::types::string::Did;
-use atrium_api::types::{LimitedNonZeroU8, LimitedU8, TryIntoUnknown};
+use atrium_api::types::string::{Did, Nsid};
+use atrium_api::types::{LimitedNonZeroU8, TryIntoUnknown};
 use atrium_api::{
     agent::atp_agent::AtpAgent,
     agent::atp_agent::store::MemorySessionStore,
@@ -11,7 +10,7 @@ use atrium_common::resolver::Resolver;
 use atrium_common::store::memory::MemoryStore;
 use atrium_identity::{
     did::{CommonDidResolver, CommonDidResolverConfig, DEFAULT_PLC_DIRECTORY_URL},
-    handle::{AtprotoHandleResolver, AtprotoHandleResolverConfig, DnsTxtResolver},
+    handle::AtprotoHandleResolverConfig,
 };
 use atrium_oauth::DefaultHttpClient;
 use atrium_xrpc_client::reqwest::ReqwestClient;
@@ -19,11 +18,8 @@ use backend_shared::database::Database;
 use backend_shared::game_util::parse_game_and_validate;
 use clap::{Parser, Subcommand};
 use dotenv::dotenv;
-use hickory_resolver::TokioAsyncResolver;
 use std::collections::HashMap;
 use std::sync::Arc;
-use twothousand_forty_eight::unified::validation::Validatable;
-use twothousand_forty_eight::v2::recording::SeededRecording;
 use types_2048::blue;
 
 const RELAY_ENDPOINT: &str = "https://relay1.us-west.bsky.network";
@@ -40,6 +36,12 @@ struct Cli {
 enum Commands {
     /// Admin actions for leaderboards
     Leaderboard(Leaderboard),
+    //
+    /// Backfill commands
+    Backfill {
+        #[command(flatten)]
+        command: BackfillCommands,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -56,6 +58,18 @@ enum LeaderboardCommands {
     Temp,
 }
 
+#[derive(Parser, Debug)]
+#[command(name = "backfill", about = "Backfill actions")]
+struct BackfillCommands {
+    #[arg(value_enum)]
+    action: BackfillAction,
+}
+
+#[derive(Debug, Clone, clap::ValueEnum)]
+pub enum BackfillAction {
+    Games,
+}
+
 #[derive(Debug)]
 struct TempLeaderboardPlace {
     pub did: Did,
@@ -65,22 +79,69 @@ struct TempLeaderboardPlace {
     pub top_score_uri: Option<String>,
     pub games_played: usize,
 }
-async fn create_a_temp_leaderboard() -> anyhow::Result<()> {
+async fn create_a_temp_leaderboard(
+    agent: &AtpAgent<MemoryStore<(), AtpSession>, ReqwestClient>,
+    did_resolver: &CommonDidResolver<DefaultHttpClient>,
+) -> anyhow::Result<()> {
     log::info!("Creating a temp leaderboard...");
-    let http_client = Arc::new(DefaultHttpClient::default());
-    dotenv().ok();
-    let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let database = Database::new(&db_url).await?;
-    //finds the did document from the users did
-    let did_resolver = CommonDidResolver::new(CommonDidResolverConfig {
-        plc_directory_url: DEFAULT_PLC_DIRECTORY_URL.to_string(),
-        http_client: Arc::clone(&http_client),
-    });
 
-    let agent = AtpAgent::new(
-        ReqwestClient::new(RELAY_ENDPOINT),
-        MemorySessionStore::default(),
+    let (resolve_count, mut hashmap_by_pds) = get_repos(
+        &did_resolver,
+        &agent,
+        blue::_2048::Game::NSID.parse().unwrap(),
+    )
+    .await;
+    log::info!(
+        "{} repos resolved. Getting games from the repos now.",
+        resolve_count
     );
+
+    let mut global_games_played = 0;
+
+    let mut leaderboards: Vec<TempLeaderboardPlace> = Vec::new();
+    for (pds_url, repos) in hashmap_by_pds.iter_mut() {
+        log::info!("Getting {} repos from {},", repos.len(), pds_url);
+        let pds_agent = AtpAgent::new(ReqwestClient::new(pds_url), MemorySessionStore::default());
+        for repo in repos {
+            match get_top_game(&pds_agent, &repo.did, &repo.handle).await {
+                Ok(new_leaderboard_place) => {
+                    global_games_played += new_leaderboard_place.games_played;
+                    leaderboards.push(new_leaderboard_place);
+                }
+                Err(err) => {
+                    log::error!("Error getting top game: {}", err);
+                    log::error!("Skipping repo: {}", repo.did.to_string());
+                    continue;
+                }
+            }
+        }
+    }
+
+    log::info!("{} games played", global_games_played);
+
+    // Sort leaderboards by top score in descending order
+    leaderboards.sort_by(|a, b| b.top_score.cmp(&a.top_score));
+
+    // Print top 10 entries
+    for (index, entry) in leaderboards.iter().enumerate() {
+        if let (Some(score), Some(_)) = (entry.top_score, entry.top_score_uri.clone()) {
+            let player = match &entry.handle {
+                Some(handle) => handle.replace("at://", "@"),
+                None => format!("@{}", entry.did.to_string()),
+            };
+
+            println!("{}. {:} {}", index + 1, score, player);
+        }
+    }
+
+    Ok(())
+}
+
+async fn get_repos(
+    did_resolver: &CommonDidResolver<DefaultHttpClient>,
+    agent: &AtpAgent<MemoryStore<(), AtpSession>, ReqwestClient>,
+    nsid: Nsid,
+) -> (i32, HashMap<String, Vec<TempLeaderboardPlace>>) {
     let result = agent
         .api
         .com
@@ -88,7 +149,7 @@ async fn create_a_temp_leaderboard() -> anyhow::Result<()> {
         .sync
         .list_repos_by_collection(
             atrium_api::com::atproto::sync::list_repos_by_collection::ParametersData {
-                collection: blue::_2048::Game::NSID.parse().unwrap(),
+                collection: nsid,
                 cursor: None,
                 limit: Some(LimitedNonZeroU16::try_from(2000_u16).unwrap()),
             }
@@ -98,7 +159,7 @@ async fn create_a_temp_leaderboard() -> anyhow::Result<()> {
     let output = match result {
         Ok(output) => output,
         Err(err) => {
-            anyhow::bail!("{:?}", err)
+            return (0, HashMap::new());
         }
     };
     let mut resolve_count = 0;
@@ -155,50 +216,7 @@ async fn create_a_temp_leaderboard() -> anyhow::Result<()> {
             log::info!("{} repos resolved", resolve_count);
         }
     }
-    log::info!(
-        "{} repos resolved. Getting games from the repos now.",
-        resolve_count
-    );
-
-    let mut global_games_played = 0;
-
-    let mut leaderboards: Vec<TempLeaderboardPlace> = Vec::new();
-    for (pds_url, repos) in hashmap_by_pds.iter_mut() {
-        log::info!("Getting {} repos from {},", repos.len(), pds_url);
-        let pds_agent = AtpAgent::new(ReqwestClient::new(pds_url), MemorySessionStore::default());
-        for repo in repos {
-            match get_top_game(&pds_agent, &repo.did, &repo.handle).await {
-                Ok(new_leaderboard_place) => {
-                    global_games_played += new_leaderboard_place.games_played;
-                    leaderboards.push(new_leaderboard_place);
-                }
-                Err(err) => {
-                    log::error!("Error getting top game: {}", err);
-                    log::error!("Skipping repo: {}", repo.did.to_string());
-                    continue;
-                }
-            }
-        }
-    }
-
-    log::info!("{} games played", global_games_played);
-
-    // Sort leaderboards by top score in descending order
-    leaderboards.sort_by(|a, b| b.top_score.cmp(&a.top_score));
-
-    // Print top 10 entries
-    for (index, entry) in leaderboards.iter().enumerate() {
-        if let (Some(score), Some(_)) = (entry.top_score, entry.top_score_uri.clone()) {
-            let player = match &entry.handle {
-                Some(handle) => handle.replace("at://", "@"),
-                None => format!("@{}", entry.did.to_string()),
-            };
-
-            println!("{}. {:} {}", index + 1, score, player);
-        }
-    }
-
-    Ok(())
+    (resolve_count, hashmap_by_pds)
 }
 
 async fn get_top_game(
@@ -274,7 +292,7 @@ async fn get_top_game(
     Ok(TempLeaderboardPlace {
         did: did.clone(),
         handle: handle.clone(),
-        pds_url: "https://relay1.us-east.bsky.network".to_string(),
+        pds_url: atp_agent.get_endpoint().await,
         top_score: Some(top_score),
         top_score_uri: top_score_uri,
         games_played,
@@ -285,10 +303,32 @@ async fn get_top_game(
 async fn main() -> anyhow::Result<()> {
     dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+
+    let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let database = Database::new(&db_url).await?;
+    let http_client = Arc::new(DefaultHttpClient::default());
+
+    //finds the did document from the users did
+    let did_resolver = CommonDidResolver::new(CommonDidResolverConfig {
+        plc_directory_url: DEFAULT_PLC_DIRECTORY_URL.to_string(),
+        http_client: Arc::clone(&http_client),
+    });
+
+    let agent = AtpAgent::new(
+        ReqwestClient::new(RELAY_ENDPOINT),
+        MemorySessionStore::default(),
+    );
+
     let cli = Cli::parse();
     match &cli.command {
         Commands::Leaderboard(Leaderboard { subcommand }) => match subcommand {
-            LeaderboardCommands::Temp => create_a_temp_leaderboard().await,
+            LeaderboardCommands::Temp => create_a_temp_leaderboard(&agent, &did_resolver).await,
+        },
+        Commands::Backfill { command, .. } => match command.action {
+            BackfillAction::Games => {
+                println!("Games backfill");
+                Ok(())
+            }
         },
     }
 }
