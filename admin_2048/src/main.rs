@@ -137,6 +137,128 @@ async fn create_a_temp_leaderboard(
     Ok(())
 }
 
+async fn backfill_games(
+    agent: &AtpAgent<MemoryStore<(), AtpSession>, ReqwestClient>,
+    did_resolver: &CommonDidResolver<DefaultHttpClient>,
+    database: Database,
+) -> anyhow::Result<()> {
+    log::info!("Creating a temp leaderboard...");
+
+    let (resolve_count, mut hashmap_by_pds) = get_repos(
+        &did_resolver,
+        &agent,
+        blue::_2048::Game::NSID.parse().unwrap(),
+    )
+    .await;
+    log::info!(
+        "{} repos resolved. Getting games from the repos now.",
+        resolve_count
+    );
+
+    let mut global_games_played = 0;
+
+    let mut leaderboards: Vec<TempLeaderboardPlace> = Vec::new();
+    for (pds_url, repos) in hashmap_by_pds.iter_mut() {
+        log::info!("Getting {} repos from {},", repos.len(), pds_url);
+        let pds_agent = AtpAgent::new(ReqwestClient::new(pds_url), MemorySessionStore::default());
+        for repo in repos {
+            match save_a_repos_games(&pds_agent, &database, &repo.did).await {
+                Ok(()) => {}
+                Err(err) => {
+                    log::error!("Error getting top game: {}", err);
+                    log::error!("Skipping repo: {}", repo.did.to_string());
+                    continue;
+                }
+            }
+        }
+    }
+
+    log::info!("{} games played", global_games_played);
+
+    // Sort leaderboards by top score in descending order
+    leaderboards.sort_by(|a, b| b.top_score.cmp(&a.top_score));
+
+    // Print top 10 entries
+    for (index, entry) in leaderboards.iter().enumerate() {
+        if let (Some(score), Some(_)) = (entry.top_score, entry.top_score_uri.clone()) {
+            let player = match &entry.handle {
+                Some(handle) => handle.replace("at://", "@"),
+                None => format!("@{}", entry.did.to_string()),
+            };
+
+            println!("{}. {:} {}", index + 1, score, player);
+        }
+    }
+
+    Ok(())
+}
+
+async fn save_a_repos_games(
+    atp_agent: &AtpAgent<MemoryStore<(), AtpSession>, ReqwestClient>,
+    database: &Database,
+    did: &Did,
+) -> anyhow::Result<()> {
+    let mut cursor = None;
+    let mut keep_calling = true;
+    while keep_calling {
+        log::info!("Getting top game for {}", did.clone().to_string());
+        match atp_agent
+            .api
+            .com
+            .atproto
+            .repo
+            .list_records(
+                atrium_api::com::atproto::repo::list_records::ParametersData {
+                    collection: types_2048::blue::_2048::Game::NSID.parse().unwrap(),
+                    cursor: cursor.clone(),
+                    limit: Some(LimitedNonZeroU8::<100>::try_from(100_u8).unwrap()),
+                    repo: did.clone().into(),
+                    reverse: None,
+                }
+                .into(),
+            )
+            .await
+        {
+            Ok(output) => {
+                if output.records.len() == 100 {
+                    cursor = output.cursor.clone();
+                } else {
+                    keep_calling = false;
+                    cursor = None;
+                }
+
+                for record in &output.records {
+                    let game: types_2048::blue::_2048::game::RecordData =
+                        types_2048::blue::_2048::game::RecordData::from(record.value.clone());
+
+                    match parse_game_and_validate(&game.seeded_recording) {
+                        Ok(result) => {
+                            let uri = record.uri.clone();
+                            if let Err(error) = database
+                                .insert_game(&game, result.hash, result.score as i32, did, &uri)
+                                .await
+                            {
+                                log::error!("Error inserting game: {}", error);
+                                continue;
+                            }
+                        }
+                        Err(err) => {
+                            log::error!("Error parsing game: {}", err);
+                            continue;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("Error getting top game: {}", e);
+                break;
+            }
+        };
+    }
+
+    Ok(())
+}
+
 async fn get_repos(
     did_resolver: &CommonDidResolver<DefaultHttpClient>,
     agent: &AtpAgent<MemoryStore<(), AtpSession>, ReqwestClient>,
@@ -325,10 +447,7 @@ async fn main() -> anyhow::Result<()> {
             LeaderboardCommands::Temp => create_a_temp_leaderboard(&agent, &did_resolver).await,
         },
         Commands::Backfill { command, .. } => match command.action {
-            BackfillAction::Games => {
-                println!("Games backfill");
-                Ok(())
-            }
+            BackfillAction::Games => backfill_games(&agent, &did_resolver, database).await,
         },
     }
 }

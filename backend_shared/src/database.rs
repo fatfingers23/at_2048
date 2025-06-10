@@ -30,17 +30,28 @@ impl Database {
         Ok(Self { pool })
     }
 
-    /// Inserts a game record into the database
     ///
-    /// # Arguments
+    /// Inserts a new game record into the `games` database table.
     ///
-    /// * `record` - The game record to insert
-    /// * `did` - The DID of the user who created the game
-    /// * `at_uri` - The AT URI of the game record
+    /// # Parameters
+    /// - `record`: A reference to a `RecordData` object representing the game record data to be inserted.
+    /// - `game_hash`: A `String` representing the unique hash identifier for the game.
+    /// - `validated_score`: An `i32` representing the validated score associated with the game.
+    /// - `did`: A string slice (`&str`) representing the decentralized identifier (DID) for the game.
+    /// - `at_uri`: A reference to a `String` containing the at://uri associated with the game record.
     ///
     /// # Returns
+    /// - `Result<i64, DatabaseError>`: On success, returns the `id` of the inserted game record as an `i64`.
+    ///   On failure, returns a `DatabaseError`.
     ///
-    /// The ID of the inserted game record
+    /// # Errors
+    /// This function will return an error if the database operation fails such as:
+    /// - Failure to connect or query the database.
+    /// - Any issues during the `INSERT` operation.
+    ///
+    /// # Notes
+    /// - The `record` is converted to a JSONB format before being inserted into the database.
+    /// - The function is asynchronous and should be awaited.
     pub async fn insert_game(
         &self,
         record: &game::RecordData,
