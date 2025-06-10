@@ -1,5 +1,5 @@
 [workspace]
-members = ["admin_2048", "appview_2048", "client_2048", "types_2048"]
+members = ["admin_2048", "appview_2048", "client_2048", "data_access", "types_2048"]
 resolver = "2"
 
 [workspace.dependencies]
