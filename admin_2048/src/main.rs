@@ -24,7 +24,7 @@ use twothousand_forty_eight::v2::recording::SeededRecording;
 
 use types_2048::blue;
 
-const RELAY_ENDPOINT: &str = "https://relay1.us-east.bsky.network";
+const RELAY_ENDPOINT: &str = "https://relay1.us-west.bsky.network";
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]

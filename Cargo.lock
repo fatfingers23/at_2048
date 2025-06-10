@@ -817,8 +817,11 @@ dependencies = [
 name = "data_access"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "sqlx",
  "thiserror 2.0.12",
+ "twothousand-forty-eight",
+ "types-2048",
 ]
 
 [[package]]
