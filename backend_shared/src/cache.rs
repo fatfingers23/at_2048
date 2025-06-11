@@ -106,24 +106,9 @@ impl Cache {
     {
         // Try to get from cache first
         match self.fetch_redis_json_object::<T>(redis_key).await {
-            Ok(val) => match val {
-                None => {
-                    let result = fallback_fn().await?;
-
-                    // Write the result to cache
-                    self.write_to_cache_with_seconds(redis_key, &result, seconds)
-                        .await
-                        .map_err(|err| {
-                            log::error!("Error fetching from redis: {}", err);
-                            RedisFetchErrors::FromDbError
-                        })?;
-
-                    Ok(result)
-                }
-                Some(val) => Ok(val),
-            },
-            Err(RedisFetchErrors::FromDbError) => {
-                // If not in cache, execute the fallback function
+            Ok(Some(val)) => Ok(val),
+            Ok(None) => {
+                // If not in cache or error, execute the fallback function
                 let result = fallback_fn().await?;
 
                 // Write the result to cache
