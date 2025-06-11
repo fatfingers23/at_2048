@@ -80,9 +80,7 @@ impl LexiconIngestor for GameIngestor {
             ..
         }) = message.commit
         {
-            if let Some(Value::String(text)) = record.get("text") {
-                println!("{text:?}");
-            }
+            println!("{record:?}");
         }
         Ok(())
     }
