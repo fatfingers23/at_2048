@@ -14,6 +14,7 @@ use atrium_identity::{
 };
 use atrium_oauth::DefaultHttpClient;
 use atrium_xrpc_client::reqwest::ReqwestClient;
+use backend_shared::cache::{Cache, DID_DOC_KEY_PREFIX, RedisFetchErrors};
 use backend_shared::database::Database;
 use backend_shared::game_util::parse_game_and_validate;
 use clap::{Parser, Subcommand};
@@ -82,12 +83,14 @@ struct TempLeaderboardPlace {
 async fn create_a_temp_leaderboard(
     agent: &AtpAgent<MemoryStore<(), AtpSession>, ReqwestClient>,
     did_resolver: &CommonDidResolver<DefaultHttpClient>,
+    cache: &mut Cache,
 ) -> anyhow::Result<()> {
     log::info!("Creating a temp leaderboard...");
 
     let (resolve_count, mut hashmap_by_pds) = get_repos(
         &did_resolver,
         &agent,
+        cache,
         blue::_2048::Game::NSID.parse().unwrap(),
     )
     .await;
@@ -141,12 +144,14 @@ async fn backfill_games(
     agent: &AtpAgent<MemoryStore<(), AtpSession>, ReqwestClient>,
     did_resolver: &CommonDidResolver<DefaultHttpClient>,
     database: Database,
+    cache: &mut Cache,
 ) -> anyhow::Result<()> {
     log::info!("Creating a temp leaderboard...");
 
     let (resolve_count, mut hashmap_by_pds) = get_repos(
         &did_resolver,
         &agent,
+        cache,
         blue::_2048::Game::NSID.parse().unwrap(),
     )
     .await;
@@ -262,6 +267,7 @@ async fn save_a_repos_games(
 async fn get_repos(
     did_resolver: &CommonDidResolver<DefaultHttpClient>,
     agent: &AtpAgent<MemoryStore<(), AtpSession>, ReqwestClient>,
+    cache: &mut Cache,
     nsid: Nsid,
 ) -> (i32, HashMap<String, Vec<TempLeaderboardPlace>>) {
     let result = agent
@@ -288,10 +294,23 @@ async fn get_repos(
     let mut hashmap_by_pds: HashMap<String, Vec<TempLeaderboardPlace>> = HashMap::new();
     for repo in &output.repos {
         resolve_count += 1;
-        let resolved_did = match did_resolver.resolve(&repo.did).await {
+
+        // We check the cache first to see if the DidDocument is there already
+        // Not really needed here besides multiple re-runs, but more so proof of concept for later usage
+        let key = format!("{}:{}", DID_DOC_KEY_PREFIX, repo.did.to_string());
+        //43200 = 8hours
+        let resolved_did = cache
+            .get_or_set(key.as_str(), 43_200, || async {
+                did_resolver
+                    .resolve(&repo.did)
+                    .await
+                    .map_err(|e| RedisFetchErrors::Other(e.to_string()))
+            })
+            .await;
+        let resolved_did = match resolved_did {
             Ok(doc) => doc,
             Err(err) => {
-                log::error!("Error resolving: {} {:?}", &repo.did.to_string(), err);
+                log::error!("Here: Error resolving: {} {:?}", &repo.did.to_string(), err);
                 continue;
             }
         };
@@ -428,6 +447,10 @@ async fn main() -> anyhow::Result<()> {
 
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let database = Database::new(&db_url).await?;
+
+    let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
+    let mut cache = Cache::new(&redis_url).await?;
+
     let http_client = Arc::new(DefaultHttpClient::default());
 
     //finds the did document from the users did
@@ -444,10 +467,14 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match &cli.command {
         Commands::Leaderboard(Leaderboard { subcommand }) => match subcommand {
-            LeaderboardCommands::Temp => create_a_temp_leaderboard(&agent, &did_resolver).await,
+            LeaderboardCommands::Temp => {
+                create_a_temp_leaderboard(&agent, &did_resolver, &mut cache).await
+            }
         },
         Commands::Backfill { command, .. } => match command.action {
-            BackfillAction::Games => backfill_games(&agent, &did_resolver, database).await,
+            BackfillAction::Games => {
+                backfill_games(&agent, &did_resolver, database, &mut cache).await
+            }
         },
     }
 }
