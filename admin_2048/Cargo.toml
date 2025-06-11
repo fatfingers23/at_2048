@@ -7,15 +7,16 @@ edition = "2024"
 types-2048 = { path = "../types_2048" }
 clap = { version = "4.5.37", features = ["derive"] }
 tokio.workspace = true
-anyhow = "1.0.97"
+anyhow.workspace = true
 atrium-api.workspace = true
 atrium-common.workspace = true
 atrium-identity.workspace = true
 atrium-xrpc-client.workspace = true
 atrium-oauth.workspace = true
-env_logger = "0.11.8"
-log = "0.4.27"
+env_logger.workspace = true
+log.workspace = true
+dotenv.workspace = true
 hickory-resolver = "0.24.1"
 twothousand-forty-eight.workspace = true
-dotenv = "0.15.0"
+
 backend_shared.workspace = true

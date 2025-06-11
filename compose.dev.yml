@@ -13,8 +13,22 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - 2048-network
+  redis:
+    image: 'redis:alpine'
+    restart: always
+    ports:
+      - '${FORWARD_REDIS_PORT:-6379}:6379'
+    volumes:
+      - 'at_2048-redis:/data'
+    networks:
+      - 2048-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      retries: 3
+      timeout: 5s
 volumes:
   2048_postgres_data:
+  at_2048-redis:
 networks:
   2048-network:
     driver: bridge

@@ -1,8 +1,9 @@
 [workspace]
-members = ["admin_2048", "appview_2048", "client_2048", "backend_shared", "types_2048"]
+members = ["admin_2048", "appview_2048", "client_2048", "backend_shared", "types_2048", "jetstream", "verify_tests"]
 resolver = "2"
 
 [workspace.dependencies]
+anyhow = "1.0.97"
 atrium-api = "0.25.3"
 atrium-common = "0.1.2"
 atrium-identity = "0.1.4"
@@ -17,3 +18,6 @@ serde = { version = "1.0.219", features = ["derive"] }
 tokio = { version = "1.44.1", features = ["full"] }
 types-2048 = { path = "./types_2048" }
 backend_shared = { path = "./backend_shared" }
+env_logger = "0.11.8"
+log = "0.4.27"
+dotenv = "0.15.0"
