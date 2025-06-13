@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+atrium-api.workspace = true
+atrium-xrpc-client.workspace = true
+atrium-common.workspace = true
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "tls-native-tls", "postgres", "derive", "macros", "migrate", "json"] }
 thiserror = "2.0.12"
 types-2048.workspace = true

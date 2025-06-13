@@ -401,6 +401,9 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 name = "backend_shared"
 version = "0.1.0"
 dependencies = [
+ "atrium-api",
+ "atrium-common",
+ "atrium-xrpc-client",
  "log",
  "redis",
  "serde",
@@ -2663,7 +2666,12 @@ dependencies = [
  "anyhow",
  "async-trait",
  "atrium-api",
+ "atrium-common",
+ "atrium-identity",
+ "atrium-oauth",
+ "atrium-xrpc-client",
  "backend_shared",
+ "chrono",
  "dotenv",
  "env_logger",
  "log",

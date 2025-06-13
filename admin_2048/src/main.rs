@@ -14,6 +14,7 @@ use atrium_identity::{
 };
 use atrium_oauth::DefaultHttpClient;
 use atrium_xrpc_client::reqwest::ReqwestClient;
+use backend_shared::atproto_util::parse_did_doc;
 use backend_shared::cache::{Cache, DID_DOC_KEY_PREFIX, RedisFetchErrors};
 use backend_shared::database::Database;
 use backend_shared::game_util::parse_game_and_validate;
@@ -314,28 +315,21 @@ async fn get_repos(
                 continue;
             }
         };
-        let handle = resolved_did.also_known_as.unwrap().get(0).unwrap().clone();
-        let pds_url = match resolved_did.service.as_ref().and_then(|services| {
-            services
-                .iter()
-                .find(|service| service.r#type == "AtprotoPersonalDataServer")
-                .map(|service| service.service_endpoint.clone())
-        }) {
-            None => {
-                log::error!("No pds url found for {}", &repo.did.to_string());
+        let parsed_doc = match parse_did_doc(resolved_did) {
+            Ok(doc) => doc,
+            Err(_) => {
+                log::error!("Error parsing did doc: {}", repo.did.to_string());
                 continue;
             }
-            Some(url) => url,
         };
-
-        match hashmap_by_pds.get_mut(&pds_url) {
+        match hashmap_by_pds.get_mut(&parsed_doc.pds_url) {
             None => {
                 hashmap_by_pds.insert(
-                    pds_url.clone(),
+                    parsed_doc.pds_url.clone(),
                     vec![TempLeaderboardPlace {
                         did: repo.did.clone(),
-                        handle: Some(handle),
-                        pds_url,
+                        handle: parsed_doc.handle,
+                        pds_url: parsed_doc.pds_url,
                         top_score: None,
                         top_score_uri: None,
                         games_played: 0,
@@ -345,8 +339,8 @@ async fn get_repos(
             Some(already_exists) => {
                 already_exists.push(TempLeaderboardPlace {
                     did: repo.did.clone(),
-                    handle: Some(handle),
-                    pds_url: pds_url.clone(),
+                    handle: parsed_doc.handle,
+                    pds_url: parsed_doc.pds_url,
                     top_score: None,
                     top_score_uri: None,
                     games_played: 0,
