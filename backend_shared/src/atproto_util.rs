@@ -218,11 +218,11 @@ pub mod schema {
         /// fixed value of 3 for this repo format version
         pub version: i64,
         /// pointer to the top of the repo contents tree structure (MST)
-        pub data: Cid,
+        pub data: ipld_core::cid::Cid,
         /// revision of the repo, used as a logical clock. Must increase monotonically
         pub rev: Tid,
         /// pointer (by hash) to a previous commit object for this repository
-        pub prev: Option<Cid>,
+        pub prev: Option<ipld_core::cid::Cid>,
     }
 
     /// Signed commit data. This is the exact same as a [Commit], but with a
@@ -238,11 +238,11 @@ pub mod schema {
         /// fixed value of 3 for this repo format version
         pub version: i64,
         /// pointer to the top of the repo contents tree structure (MST)
-        pub data: Cid,
+        pub data: ipld_core::cid::Cid,
         /// revision of the repo, used as a logical clock. Must increase monotonically
         pub rev: Tid,
         /// pointer (by hash) to a previous commit object for this repository
-        pub prev: Option<Cid>,
+        pub prev: Option<ipld_core::cid::Cid>,
         /// cryptographic signature of this commit, as raw bytes
         #[serde(with = "serde_bytes")]
         pub sig: Vec<u8>,
