@@ -5,8 +5,8 @@ edition = "2024"
 
 [dependencies]
 types-2048.workspace = true
-atrium-repo = "0.1.4"
-atrium-crypto = "0.1.2"
+atrium-repo.workspace = true
+atrium-crypto.workspace = true
 atrium-api.workspace = true
 sha2 = "0.11.0-rc.0"
 cid = "0.11.1"

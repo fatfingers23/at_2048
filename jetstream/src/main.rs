@@ -12,7 +12,7 @@ use atrium_identity::{
 };
 use atrium_oauth::DefaultHttpClient;
 use atrium_xrpc_client::reqwest::ReqwestClient;
-use backend_shared::atproto_util::{ParsedDIDDoc, parse_did_doc};
+use backend_shared::atproto_util::{ParsedDIDDoc, get_and_validate_record, parse_did_doc};
 use backend_shared::cache::{Cache, DID_DOC_KEY_PREFIX, RedisFetchErrors};
 use backend_shared::database::Database;
 use dotenv::dotenv;
@@ -165,7 +165,17 @@ impl LexiconIngestor for GameIngestor {
                             return Err(anyhow::anyhow!("Error parsing did doc: {:?}", e));
                         }
                     };
-                    self.agent.configure_endpoint(parsed_did_doc.pds_url);
+                    self.agent
+                        .configure_endpoint(parsed_did_doc.pds_url.clone());
+                    let record = get_and_validate_record::<types_2048::blue::_2048::Game>(
+                        &self.agent,
+                        &parsed_did_doc,
+                        cid.parse()?,
+                        commit.rkey.parse().unwrap(),
+                        types_2048::blue::_2048::Game::NSID,
+                    )
+                    .await;
+                    log::info!("Record: {:?}", record);
 
                     return Ok(());
                 }

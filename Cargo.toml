@@ -10,6 +10,8 @@ atrium-identity = "0.1.4"
 atrium-oauth = "0.1.2"
 atrium-xrpc = "0.12.3"
 atrium-xrpc-client = "0.5.14"
+atrium-repo = "0.1.4"
+atrium-crypto = "0.1.2"
 twothousand-forty-eight = { version = "0.22.1", features = [
     "wasm",
     "wasm-bindgen",
