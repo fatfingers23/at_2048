@@ -12,14 +12,12 @@ use atrium_xrpc_client::reqwest::ReqwestClient;
 use backend_shared::atproto_util::{get_and_validate_record, parse_did_doc};
 use backend_shared::cache::{Cache, DID_DOC_KEY_PREFIX, RedisFetchErrors};
 use backend_shared::database::Database;
+use backend_shared::game_util::parse_game_and_validate;
 use dotenv::dotenv;
 use rocketman::types::event::Operation;
 use rocketman::{
-    connection::JetstreamConnection,
-    handler,
-    ingestion::LexiconIngestor,
-    options::JetstreamOptions,
-    types::event::Event,
+    connection::JetstreamConnection, handler, ingestion::LexiconIngestor,
+    options::JetstreamOptions, types::event::Event,
 };
 use serde_json::Value;
 use std::sync::Mutex;
@@ -167,12 +165,27 @@ impl LexiconIngestor for GameIngestor {
                     let record = get_and_validate_record::<types_2048::blue::_2048::Game>(
                         &self.agent,
                         &parsed_did_doc,
-                        cid.parse()?,
                         commit.rkey.parse().unwrap(),
                         types_2048::blue::_2048::Game::NSID,
                     )
-                    .await;
-                    log::info!("Record: {:?}", record);
+                    .await?;
+                    if let Some(record) = record {
+                        let record_uri =
+                            format!("at://{}/{}/{}", message.did, commit.collection, commit.rkey);
+                        log::info!("Record URI: {}", record_uri);
+                        log::info!("Record: {:?}", record);
+                        let parsed_game = parse_game_and_validate(&record.seeded_recording)?;
+
+                        self.database
+                            .insert_game(
+                                &record,
+                                parsed_game.hash,
+                                parsed_game.score as i32,
+                                message.did.as_str(),
+                                &record_uri,
+                            )
+                            .await?;
+                    }
 
                     return Ok(());
                 }

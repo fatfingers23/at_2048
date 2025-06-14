@@ -1,3 +1,4 @@
+use crate::atproto_util::RecordValidationError::ErrorGettingTheCar;
 use crate::atproto_util::schema::{Commit, SignedCommit};
 use atrium_api::agent::atp_agent::{AtpAgent, AtpSession};
 use atrium_api::did_doc::DidDocument;
@@ -68,12 +69,12 @@ pub fn parse_did_doc(did_doc: DidDocument) -> Result<ParsedDIDDoc, String> {
     })
 }
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error)]
 pub enum RecordValidationError {
     #[error("Operation not implemented yet")]
     NotImplementedYet,
-    #[error("Error getting the CAR file")]
-    ErrorGettingTheCar,
+    #[error("Error getting the CAR file: {0}")]
+    ErrorGettingTheCar(String),
     #[error("Error reading the CAR file: {0}")]
     ErrorReadingTheCar(String),
     #[error("No multikey found")]
@@ -82,12 +83,13 @@ pub enum RecordValidationError {
     MultiKeyCouldNotBeParsed,
     #[error("Record not verified")]
     NotVerified,
+    #[error("CAR error: {0}")]
+    CarError(#[from] atrium_repo::repo::Error),
 }
 
 pub async fn get_and_validate_record<T: atrium_api::types::Collection>(
     agent: &AtpAgent<MemoryStore<(), AtpSession>, ReqwestClient>,
     doc: &ParsedDIDDoc,
-    cid: Cid,
     record_key: RecordKey,
     collection: &str,
 ) -> Result<Option<T::Record>, RecordValidationError>
@@ -123,8 +125,10 @@ where
         }
     };
 
-    let mut bs = CarStore::open(Cursor::new(car_buffer)).await.unwrap();
-    // log::info!("roots: {:#?}", bs.roots());
+    let mut bs = CarStore::open(Cursor::new(car_buffer))
+        .await
+        .map_err(|err| ErrorGettingTheCar(err.to_string()))?;
+
     let root_cid = match bs.roots().next() {
         None => {
             return Err(RecordValidationError::ErrorReadingTheCar(String::from(
@@ -133,7 +137,7 @@ where
         }
         Some(root_cid) => root_cid,
     };
-    log::info!("Root CID: {}", root_cid);
+
     let root_commit: SignedCommit = match bs.read_block(root_cid).await {
         Ok(bytes) => match serde_ipld_dagcbor::from_reader(&bytes[..]) {
             Ok(commit) => commit,
@@ -146,49 +150,29 @@ where
         }
     };
 
-    let (alg, key) = match parse_multikey(multi_key) {
-        Ok((alg, key)) => (alg, key),
-        Err(err) => {
-            return Err(RecordValidationError::MultiKeyCouldNotBeParsed);
-        }
-    };
-    //TODO may need to pass in true?
+    let (alg, key) =
+        parse_multikey(multi_key).map_err(|_| RecordValidationError::MultiKeyCouldNotBeParsed)?;
+
     let verifier = Verifier::new(false);
 
-    let mut repo = match Repository::open(bs, root_cid).await {
-        Ok(repo) => repo,
-        Err(err) => {
-            return Err(RecordValidationError::ErrorReadingTheCar(err.to_string()));
-        }
-    };
+    let mut repo = Repository::open(bs, root_cid).await?;
 
-    let data_to_verify = match serde_ipld_dagcbor::to_vec(&Commit {
+    let data_to_verify = serde_ipld_dagcbor::to_vec(&Commit {
         did: root_commit.did.clone(),
         version: root_commit.version,
         data: root_commit.data,
         rev: root_commit.rev.clone(),
         prev: root_commit.prev,
-    }) {
-        Ok(data) => data,
-        Err(err) => {
-            return Err(RecordValidationError::ErrorReadingTheCar(err.to_string()));
-        }
-    };
+    })
+    .map_err(|err| RecordValidationError::ErrorReadingTheCar(err.to_string()))?;
 
     let result = verifier.verify(alg, &key, &data_to_verify[..], &root_commit.sig[..]);
     if let Err(err) = result {
         log::error!("Error verifying record: {}", err);
-        return Err(RecordValidationError::NotImplementedYet);
+        return Err(RecordValidationError::NotVerified);
     }
 
-    let possible_record = match repo.get::<T>(record_key).await {
-        Ok(record) => record,
-        Err(err) => {
-            return Err(RecordValidationError::ErrorReadingTheCar(err.to_string()));
-        }
-    };
-
-    log::info!("Verifying record: {:?}", possible_record);
+    let possible_record = repo.get::<T>(record_key).await?;
 
     match possible_record {
         None => Ok(None),
@@ -197,7 +181,7 @@ where
 }
 
 pub mod schema {
-    
+
     use atrium_api::types::string::{Did, Tid};
     use serde::{Deserialize, Serialize};
 
