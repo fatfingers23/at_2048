@@ -1,6 +1,6 @@
 use atrium_api::agent::atp_agent::AtpSession;
-use atrium_api::types::string::{Did, Nsid};
 use atrium_api::types::LimitedNonZeroU8;
+use atrium_api::types::string::{Did, Nsid};
 use atrium_api::{
     agent::atp_agent::AtpAgent,
     agent::atp_agent::store::MemorySessionStore,
@@ -241,7 +241,9 @@ async fn save_a_repos_games(
                                 .insert_game(&game, result.hash, result.score as i32, did, &uri)
                                 .await
                             {
-                                log::error!("Error inserting game: {}", error);
+                                if !error.to_string().contains("games_game_hash_idx") {
+                                    log::error!("Error inserting game: {}", error);
+                                }
                                 continue;
                             }
                         }
