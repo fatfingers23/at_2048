@@ -1,6 +1,6 @@
 use atrium_api::agent::atp_agent::AtpSession;
 use atrium_api::types::string::{Did, Nsid};
-use atrium_api::types::{LimitedNonZeroU8, TryIntoUnknown};
+use atrium_api::types::LimitedNonZeroU8;
 use atrium_api::{
     agent::atp_agent::AtpAgent,
     agent::atp_agent::store::MemorySessionStore,
@@ -8,10 +8,7 @@ use atrium_api::{
 };
 use atrium_common::resolver::Resolver;
 use atrium_common::store::memory::MemoryStore;
-use atrium_identity::{
-    did::{CommonDidResolver, CommonDidResolverConfig, DEFAULT_PLC_DIRECTORY_URL},
-    handle::AtprotoHandleResolverConfig,
-};
+use atrium_identity::did::{CommonDidResolver, CommonDidResolverConfig, DEFAULT_PLC_DIRECTORY_URL};
 use atrium_oauth::DefaultHttpClient;
 use atrium_xrpc_client::reqwest::ReqwestClient;
 use backend_shared::atproto_util::parse_did_doc;
@@ -161,7 +158,7 @@ async fn backfill_games(
         resolve_count
     );
 
-    let mut global_games_played = 0;
+    let global_games_played = 0;
 
     let mut leaderboards: Vec<TempLeaderboardPlace> = Vec::new();
     for (pds_url, repos) in hashmap_by_pds.iter_mut() {

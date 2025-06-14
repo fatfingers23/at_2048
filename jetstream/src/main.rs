@@ -6,13 +6,10 @@ use atrium_api::types::Collection;
 use atrium_api::types::string::Did;
 use atrium_common::resolver::Resolver;
 use atrium_common::store::memory::MemoryStore;
-use atrium_identity::{
-    did::{CommonDidResolver, CommonDidResolverConfig, DEFAULT_PLC_DIRECTORY_URL},
-    handle::AtprotoHandleResolverConfig,
-};
+use atrium_identity::did::{CommonDidResolver, CommonDidResolverConfig, DEFAULT_PLC_DIRECTORY_URL};
 use atrium_oauth::DefaultHttpClient;
 use atrium_xrpc_client::reqwest::ReqwestClient;
-use backend_shared::atproto_util::{ParsedDIDDoc, get_and_validate_record, parse_did_doc};
+use backend_shared::atproto_util::{get_and_validate_record, parse_did_doc};
 use backend_shared::cache::{Cache, DID_DOC_KEY_PREFIX, RedisFetchErrors};
 use backend_shared::database::Database;
 use dotenv::dotenv;
@@ -22,7 +19,7 @@ use rocketman::{
     handler,
     ingestion::LexiconIngestor,
     options::JetstreamOptions,
-    types::event::{Commit, Event},
+    types::event::Event,
 };
 use serde_json::Value;
 use std::sync::Mutex;
@@ -38,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
     let database = Database::new(&db_url).await.map_err(anyhow::Error::from)?;
 
     let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
-    let mut cache = Cache::new(&redis_url).await?;
+    let cache = Cache::new(&redis_url).await?;
 
     let http_client = Arc::new(DefaultHttpClient::default());
     let did_resolver = CommonDidResolver::new(CommonDidResolverConfig {

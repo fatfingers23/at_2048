@@ -7,15 +7,10 @@ use atrium_common::store::memory::MemoryStore;
 use atrium_crypto::did::parse_multikey;
 use atrium_crypto::verify::Verifier;
 use atrium_repo::Repository;
-use atrium_repo::blockstore::{AsyncBlockStoreRead, CarStore, Error};
+use atrium_repo::blockstore::{AsyncBlockStoreRead, CarStore};
 use atrium_xrpc_client::reqwest::ReqwestClient;
-use serde::Deserialize;
-use serde_ipld_dagcbor::{DecodeError, EncodeError};
-use std::collections::TryReserveError;
 use std::io::Cursor;
 use thiserror::Error;
-use types_2048::blue;
-use types_2048::blue::_2048::game::Record;
 
 pub struct ParsedDIDDoc {
     pub did: String,
@@ -202,7 +197,7 @@ where
 }
 
 pub mod schema {
-    use super::*;
+    
     use atrium_api::types::string::{Did, Tid};
     use serde::{Deserialize, Serialize};
 

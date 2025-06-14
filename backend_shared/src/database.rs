@@ -2,8 +2,6 @@ use serde_json::json;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres};
 use thiserror::Error;
-use twothousand_forty_eight::unified::hash::Hashable;
-use twothousand_forty_eight::v2::recording::SeededRecording;
 use types_2048::blue::_2048::game;
 
 pub struct Database {

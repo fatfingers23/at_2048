@@ -1,5 +1,5 @@
 use redis::aio::ConnectionManager;
-use redis::{AsyncCommands, RedisError};
+use redis::AsyncCommands;
 use redis::{Connection, RedisResult};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
