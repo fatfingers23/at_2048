@@ -15,6 +15,7 @@ use log::info;
 use numfmt::{Formatter, Precision};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use twothousand_forty_eight::direction::Direction;
 use twothousand_forty_eight::{unified::game::GameState, v2::recording::SeededRecording};
@@ -37,7 +38,9 @@ struct State {
     history: SeededRecording,
     message: String,
     hiscore: usize,
-    // current_game: game::RecordData,
+    /// Maps tile ID to (x, y) position from the previous move, used for merge animations
+    #[serde(default)]
+    previous_tiles: HashMap<usize, (usize, usize)>,
 }
 
 impl PartialEq for State {
@@ -45,6 +48,7 @@ impl PartialEq for State {
         self.history == other.history
             && self.message == other.message
             && self.hiscore == other.hiscore
+            && self.previous_tiles == other.previous_tiles
     }
 }
 
@@ -68,8 +72,21 @@ impl Reducible for State {
                         history: self.history.clone(),
                         message,
                         hiscore: self.hiscore,
+                        previous_tiles: HashMap::new(),
                     });
                 }
+                
+                // Capture current tile positions before the move for merge animations
+                let previous_tiles: HashMap<usize, (usize, usize)> = self
+                    .gamestate
+                    .board
+                    .tiles
+                    .iter()
+                    .flatten()
+                    .filter_map(|tile| *tile)
+                    .map(|tile| (tile.id, (tile.x, tile.y)))
+                    .collect();
+                
                 let mut new_history = self.history.clone();
                 new_history.moves.push(direction);
                 let history_string: String = (&new_history).into();
@@ -81,6 +98,7 @@ impl Reducible for State {
                             history,
                             message: String::new(),
                             hiscore: self.hiscore.max(gamestate.score_max),
+                            previous_tiles: previous_tiles.clone(),
                         },
                         Err(e) => {
                             log::error!("{:?}", e);
@@ -89,6 +107,7 @@ impl Reducible for State {
                                 history: self.history.clone(),
                                 message: format!("{:?}", e),
                                 hiscore: self.hiscore,
+                                previous_tiles: HashMap::new(),
                             }
                         }
                     },
@@ -97,6 +116,7 @@ impl Reducible for State {
                         history: self.history.clone(),
                         message: format!("{:?}", e),
                         hiscore: self.hiscore,
+                        previous_tiles: HashMap::new(),
                     },
                 };
                 let mut state_clone = state.clone();
@@ -124,6 +144,7 @@ impl State {
             history,
             message: "".to_string(),
             hiscore: 0,
+            previous_tiles: HashMap::new(),
         }
     }
 
@@ -249,6 +270,7 @@ impl State {
             message: "".to_string(),
             gamestate,
             hiscore,
+            previous_tiles: HashMap::new(),
         })
     }
 }
@@ -357,6 +379,7 @@ pub struct TileProps {
     pub x: usize,
     pub y: usize,
     pub size: usize,
+    pub merged: bool,
 }
 #[function_component(Tile)]
 pub fn tile(props: &TileProps) -> Html {
@@ -366,29 +389,100 @@ pub fn tile(props: &TileProps) -> Html {
         x,
         y,
         size,
+        merged: merged_ref,
     } = props;
 
     let text = if *tile_value_ref == 0 {
         String::new()
     } else {
-        // log::info!("value:{:?} loc: x{} y{}", *tile_value_ref, x, y);
         tile_value_ref.to_string()
     };
-    let position_class = get_position_class(*y, *x, *size);
+
+    // Calculate percentage-based positions
+    let top_percent = (*y as f64 * 100.0) / (*size as f64);
+    let left_percent = (*x as f64 * 100.0) / (*size as f64);
+    let position_style = format!("top: {}%; left: {}%;", top_percent, left_percent);
 
     let tile_class = get_bg_color_and_text_color(*tile_value_ref);
     let font_size = get_font_size(&text);
 
-    let new_tile_animation = if *new_tile_ref && *tile_value_ref != 0 {
-        "animate-spawn eink:animate-none duration-500s"
+    let animation_class = if *merged_ref && *tile_value_ref != 0 {
+        "animate-merge-pop eink:animate-none"
+    } else if *new_tile_ref && *tile_value_ref != 0 {
+        "animate-spawn eink:animate-none"
     } else {
         ""
     };
-    let move_animation = "transition-all eink:transition-none duration-200 ease-out";
 
     html! {
         <div
-            class={format!("absolute w-1/4 h-1/4 {} p-1 flex items-center justify-center {} {}", position_class, new_tile_animation, move_animation)}
+            class={format!("absolute w-1/4 h-1/4 p-1 flex items-center justify-center transition-[top,left] duration-150 ease-in-out eink:transition-none {}", animation_class)}
+            style={position_style}
+        >
+            <div
+                class={format!(
+                        "flex items-center justify-center w-full h-full {} font-bold {} rounded-md",
+                        tile_class, font_size
+                    )}
+            >
+                { text }
+            </div>
+        </div>
+    }
+}
+
+/// Ghost tile that animates from old position to merge destination, then shrinks to zero.
+/// Used to show tiles sliding into their merge position before disappearing.
+#[derive(Properties, PartialEq, Clone)]
+pub struct GhostTileProps {
+    pub tile_value: usize,
+    /// Starting x position (from previous state)
+    pub from_x: usize,
+    /// Starting y position (from previous state)
+    pub from_y: usize,
+    /// Destination x position (where the merged tile is)
+    pub to_x: usize,
+    /// Destination y position (where the merged tile is)
+    pub to_y: usize,
+    pub size: usize,
+}
+
+#[function_component(GhostTile)]
+pub fn ghost_tile(props: &GhostTileProps) -> Html {
+    let GhostTileProps {
+        tile_value,
+        from_x,
+        from_y,
+        to_x,
+        to_y,
+        size,
+    } = props;
+
+    let text = if *tile_value == 0 {
+        String::new()
+    } else {
+        tile_value.to_string()
+    };
+
+    // Calculate percentages for start and end positions
+    let from_top_percent = (*from_y as f64 * 100.0) / (*size as f64);
+    let from_left_percent = (*from_x as f64 * 100.0) / (*size as f64);
+    let to_top_percent = (*to_y as f64 * 100.0) / (*size as f64);
+    let to_left_percent = (*to_x as f64 * 100.0) / (*size as f64);
+    
+    // Pass positions as CSS custom properties for the animation
+    let position_style = format!(
+        "--from-top: {}%; --from-left: {}%; --to-top: {}%; --to-left: {}%;",
+        from_top_percent, from_left_percent, to_top_percent, to_left_percent
+    );
+
+    let tile_class = get_bg_color_and_text_color(*tile_value);
+    let font_size = get_font_size(&text);
+
+    html! {
+        <div
+            class="absolute w-1/4 h-1/4 p-1 flex items-center justify-center animate-merge-slide-out eink:animate-none z-10"
+            style={position_style}
         >
             <div
                 class={format!(
@@ -779,7 +873,7 @@ pub fn board(game_props: &GameProps) -> Html {
     let width = state.gamestate.board.width;
     let height = state.gamestate.board.height;
     let total_tiles = width * height;
-    let flatten_tiles = state
+    let mut flatten_tiles = state
         .gamestate
         .board
         .tiles
@@ -787,6 +881,32 @@ pub fn board(game_props: &GameProps) -> Html {
         .flatten()
         .filter_map(|tile| *tile)
         .collect::<Vec<_>>();
+
+    // Sort by tile ID to maintain stable render order
+    flatten_tiles.sort_by_key(|tile| tile.id);
+
+    // Build ghost tiles for merge animations
+    // For each tile that was created by merging, find the source tiles' previous positions
+    let previous_tiles = &state.previous_tiles;
+    let ghost_tiles: Vec<(usize, usize, usize, usize, usize, usize)> = flatten_tiles
+        .iter()
+        .filter_map(|tile| {
+            if let Some(merged_from_ids) = tile.merged_from {
+                // Get positions of the two tiles that merged
+                let mut ghosts = Vec::new();
+                for source_id in merged_from_ids {
+                    if let Some(&(from_x, from_y)) = previous_tiles.get(&source_id) {
+                        // ghost: (source_id, tile_value/2, from_x, from_y, to_x, to_y)
+                        ghosts.push((source_id, tile.value / 2, from_x, from_y, tile.x, tile.y));
+                    }
+                }
+                Some(ghosts)
+            } else {
+                None
+            }
+        })
+        .flatten()
+        .collect();
 
     let action = game_props.action.clone();
     let score_board_callback =
@@ -820,9 +940,13 @@ pub fn board(game_props: &GameProps) -> Html {
                         { (0..total_tiles).map(|i| {
                                 html! { <Grid key={format!("grid-parent-{}", i)} position={i} size={width} /> }
                             }).collect::<Html>() }
+                        // Ghost tiles for merge animation - render first so they appear behind
+                        { ghost_tiles.iter().map(|(source_id, value, from_x, from_y, to_x, to_y)| {
+                                html! { <GhostTile key={format!("ghost-{}", source_id)} tile_value={*value} from_x={*from_x} from_y={*from_y} to_x={*to_x} to_y={*to_y} size={width} /> }
+                            }).collect::<Html>() }
                         { flatten_tiles.into_iter().map(|tile| {
-
-                                html! { <Tile key={tile.id} tile_value={tile.value} new_tile={tile.new} x={tile.x} y={tile.y} size={width} /> }
+                                let merged = tile.merged_from.is_some();
+                                html! { <Tile key={tile.id} tile_value={tile.value} new_tile={tile.new} merged={merged} x={tile.x} y={tile.y} size={width} /> }
                             }).collect::<Html>() }
                     </div>
                 </div>

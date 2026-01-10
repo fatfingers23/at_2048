@@ -167,7 +167,7 @@ fn mini_gameboard(props: &MiniGameboardProps) -> Html {
         >
             <div class={classes!(String::from("grid grid-cols-4 p-1 md:p-2 w-full h-full"))}>
                 { flatten_tiles.into_iter().map(|tile| {
-                     html! { <MiniTile key={tile.id} tile_value={tile.value} new_tile={tile.new} x={tile.x} y={tile.y} size={4} /> }
+                     html! { <MiniTile key={tile.id} tile_value={tile.value} new_tile={tile.new} merged={false} x={tile.x} y={tile.y} size={4} /> }
                 }).collect::<Html>() }
             </div>
         </div>

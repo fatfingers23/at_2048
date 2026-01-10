@@ -33,7 +33,13 @@
     --color-light-score-addition: rgba(119, 110, 101, 0.9);
 
     /* new tile spawn animation*/
-    --animate-spawn: spawn 0.5s ease-out;
+    --animate-spawn: spawn 0.2s ease-out;
+    
+    /* merged tile pop animation - delayed to start after ghost tiles finish sliding */
+    --animate-merge-pop: merge-pop 0.2s ease-out 0.15s both;
+    
+    /* ghost tile slide-out animation for merging tiles */
+    --animate-merge-slide-out: merge-slide-out 0.15s ease-in forwards;
 
     @keyframes spawn {
         0% {
@@ -46,21 +52,32 @@
         }
     }
 
-    /* move animation */
-    --animate-moveup: moveup 2s ease-out;
-    @keyframes moveup {
+    @keyframes merge-pop {
         0% {
-            transform: translateY(0);
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.2);
+        }
+        100% {
+            transform: scale(1);
+        }
+    }
+    
+    @keyframes merge-slide-out {
+        0% {
+            top: var(--from-top);
+            left: var(--from-left);
+            transform: scale(1);
             opacity: 1;
         }
         100% {
-            transform: translateY(-150px);
+            top: var(--to-top);
+            left: var(--to-left);
+            transform: scale(0);
             opacity: 0;
         }
     }
-
-    /*transition-property {*/
-    /*}*/
 
 }
 
