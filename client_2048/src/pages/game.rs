@@ -357,6 +357,7 @@ pub struct TileProps {
     pub x: usize,
     pub y: usize,
     pub size: usize,
+    pub merged: bool,
 }
 #[function_component(Tile)]
 pub fn tile(props: &TileProps) -> Html {
@@ -366,29 +367,35 @@ pub fn tile(props: &TileProps) -> Html {
         x,
         y,
         size,
+        merged: merged_ref,
     } = props;
 
     let text = if *tile_value_ref == 0 {
         String::new()
     } else {
-        // log::info!("value:{:?} loc: x{} y{}", *tile_value_ref, x, y);
         tile_value_ref.to_string()
     };
-    let position_class = get_position_class(*y, *x, *size);
+
+    // Calculate percentage-based positions
+    let top_percent = (*y as f64 * 100.0) / (*size as f64);
+    let left_percent = (*x as f64 * 100.0) / (*size as f64);
+    let position_style = format!("top: {}%; left: {}%;", top_percent, left_percent);
 
     let tile_class = get_bg_color_and_text_color(*tile_value_ref);
     let font_size = get_font_size(&text);
 
-    let new_tile_animation = if *new_tile_ref && *tile_value_ref != 0 {
-        "animate-spawn eink:animate-none duration-500s"
+    let animation_class = if *merged_ref && *tile_value_ref != 0 {
+        "animate-merge-pop eink:animate-none"
+    } else if *new_tile_ref && *tile_value_ref != 0 {
+        "animate-spawn eink:animate-none"
     } else {
         ""
     };
-    let move_animation = "transition-all eink:transition-none duration-200 ease-out";
 
     html! {
         <div
-            class={format!("absolute w-1/4 h-1/4 {} p-1 flex items-center justify-center {} {}", position_class, new_tile_animation, move_animation)}
+            class={format!("absolute w-1/4 h-1/4 p-1 flex items-center justify-center transition-[top,left] duration-150 ease-in-out eink:transition-none {}", animation_class)}
+            style={position_style}
         >
             <div
                 class={format!(
@@ -779,7 +786,7 @@ pub fn board(game_props: &GameProps) -> Html {
     let width = state.gamestate.board.width;
     let height = state.gamestate.board.height;
     let total_tiles = width * height;
-    let flatten_tiles = state
+    let mut flatten_tiles = state
         .gamestate
         .board
         .tiles
@@ -787,6 +794,9 @@ pub fn board(game_props: &GameProps) -> Html {
         .flatten()
         .filter_map(|tile| *tile)
         .collect::<Vec<_>>();
+
+    // Sort by tile ID to maintain stable render order
+    flatten_tiles.sort_by_key(|tile| tile.id);
 
     let action = game_props.action.clone();
     let score_board_callback =
@@ -821,8 +831,8 @@ pub fn board(game_props: &GameProps) -> Html {
                                 html! { <Grid key={format!("grid-parent-{}", i)} position={i} size={width} /> }
                             }).collect::<Html>() }
                         { flatten_tiles.into_iter().map(|tile| {
-
-                                html! { <Tile key={tile.id} tile_value={tile.value} new_tile={tile.new} x={tile.x} y={tile.y} size={width} /> }
+                                let merged = tile.merged_from.is_some();
+                                html! { <Tile key={tile.id} tile_value={tile.value} new_tile={tile.new} merged={merged} x={tile.x} y={tile.y} size={width} /> }
                             }).collect::<Html>() }
                     </div>
                 </div>
