@@ -21,7 +21,9 @@ pub async fn redirect_to_auth(handle: String) -> Result<(), String> {
             AuthorizeOptions {
                 scopes: vec![
                     Scope::Known(KnownScope::Atproto),
-                    Scope::Known(KnownScope::TransitionGeneric),
+                    Scope::Unknown(String::from("repo:blue.2048.game")),
+                    Scope::Unknown(String::from("repo:blue.2048.player.profile")),
+                    Scope::Unknown(String::from("repo:blue.2048.player.stats")),
                 ],
                 ..Default::default()
             },

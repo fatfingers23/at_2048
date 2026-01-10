@@ -18,4 +18,4 @@ EXPOSE 443/udp
 COPY ../production_configs/Caddyfile /etc/caddy/Caddyfile
 COPY ../client_2048/dist /srv
 #COPY --from=wasm-builder /app/client_2048/dist /srv
-COPY ../production_configs/client_metadata.json /srv/client_metadata.json
+COPY ../production_configs/oauth-client-metadata.json /srv//Volumes/ExternalDrive/code/rust/bluesky_projects/at_2048/dockerfiles/Caddy.Dockerfile

@@ -87,14 +87,16 @@ pub fn oauth_client() -> OAuthClientType {
         }
         false => {
             let client_metadata = AtprotoClientMetadata {
-                client_id: format!("{}/client_metadata.json", origin),
+                client_id: format!("{}/oauth-client-metadata.json", origin),
                 client_uri: Some(origin.clone()),
                 redirect_uris: vec![format!("{}/oauth/callback", origin)],
                 token_endpoint_auth_method: AuthMethod::None,
                 grant_types: vec![GrantType::AuthorizationCode, GrantType::RefreshToken],
                 scopes: vec![
                     Scope::Known(KnownScope::Atproto),
-                    Scope::Known(KnownScope::TransitionGeneric),
+                    Scope::Unknown(String::from("repo:blue.2048.game")),
+                    Scope::Unknown(String::from("repo:blue.2048.player.profile")),
+                    Scope::Unknown(String::from("blue.2048.player.stats")),
                 ],
                 jwks_uri: None,
                 token_endpoint_auth_signing_alg: None,

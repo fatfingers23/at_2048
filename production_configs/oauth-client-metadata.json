@@ -1,5 +1,5 @@
 {
-  "client_id": "https://2048.blue/client_metadata.json",
+  "client_id": "https://2048.blue/oauth-client-metadata.json",
   "client_uri": "https://2048.blue",
   "redirect_uris": [
     "https://2048.blue/oauth/callback"
@@ -10,7 +10,7 @@
     "authorization_code",
     "refresh_token"
   ],
-  "scope": "atproto transition:generic",
+  "scope": "atproto repo:blue.2048.game repo:blue.2048.player.profile repo:blue.2048.player.stats",
   "response_types": [
     "code"
   ],
